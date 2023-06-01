@@ -11,7 +11,7 @@ Runs in Python3
 Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy  
 
 
-Extracts from the following keys/values:  
+*Extracts from the following keys/values:  *
   SYSTEM\Select\Current -> to get kcurrentcontrolset  
   SYSTEM\kcurrentcontrolset\Enum\USB  
   SYSTEM\kcurrentcontrolset\Enum\USBSTOR  
@@ -23,16 +23,17 @@ Extracts from the following keys/values:
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2  
 
 
-Dependencies:  
+*Dependencies:  *
   pip3 install regipy  
 
 
-Limitations:  
+*Limitations:  *
   Does not clean dirty hives - please play back transaction logs before running this tool  
 
 
-Usage:  
+*Usage:  *
   parseUSBs.py <options>  
+	
 	Options:  
 		-h 		          	Print this help message  
 		-s    <SYSTEM hive>  
@@ -40,5 +41,5 @@ Usage:
 		-u    <NTUSER.dat hive> 	- This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made  
 		-o    <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs  
 
-Example:  
+*Example:  *
     python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT  
