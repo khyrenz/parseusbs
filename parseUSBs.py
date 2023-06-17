@@ -78,6 +78,9 @@ def printHelp():
 	print('	-s <SYSTEM hive>	Parse this SYSTEM hive')
 	print('	-u <NTUSER.dat hive> 	Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided.')
 	print('				If omitted, connections to user accounts won\'t be made')
+	print('	-v <drive letter>	Parse this mounted volume')
+	print('				Use either this "-v" option or the individual hive options.')
+	print('				If this option is provided, "-s|-u|-w" options will be ignored')
 	print('	-w <SOFTWARE hive>	Parse this SOFTWARE HIVE. This argument is optional.')
 	print('				If omitted, some drive letters and volume names may be missing in the output')
 	print('	-o <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs')
@@ -85,6 +88,8 @@ def printHelp():
 	print('Example commands:')
 	print('python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv')
 	print('python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER.DAT_user1 -u NTUSER.DAT_user2')
+	print('(In Windows CMD:) python3 parseUSBs.py -v F:')
+	print('(On WSL:) python3 parseUSBs.py -v /mnt/f')
 	print()
 	print('Copyright 2023 Kathryn Hedley, Khyrenz Ltd')
 	print()
@@ -145,6 +150,7 @@ def snInDevArray(ksn, kdevarr):
 		if ksn == khyd.iSerialNumber:
 			return True
 	return False
+	
 
 
 ### MAIN function ###
@@ -159,6 +165,7 @@ next=""
 sysHive=""
 swHive=""
 userHives=[]
+kmtvol=""
 ntuflag=False
 swflag=False
 csvout=False
@@ -177,6 +184,9 @@ for karg in sys.argv:
 		if karg == "csv":
 			csvout=True
 			kvout=False
+	if next == 'volume':
+		kmtvol=karg
+		next=""
 	if karg == "-h":
 		printHelp()
 		sys.exit()
@@ -188,19 +198,40 @@ for karg in sys.argv:
 		next='ntuser'
 	if karg == "-o":
 		next='output'
+	if karg == "-v":
+		next='volume'
+
+#if volume option is provided, find Registry hives
+if kmtvol:
+	if not kmtvol.endswith("/"):
+		kmtvol = kmtvol + "/"
+		
+	sysHive=kmtvol+"Windows/System32/config/SYSTEM"
+	swHive=kmtvol+"Windows/System32/config/SOFTWARE"
+	userHives=[]
+	
+	if os.path.exists(kmtvol+"Users"):
+		userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
+		for usrdir in userfolders:
+			print(usrdir+"/NTUSER.DAT")
+			userHives.append(usrdir+"/NTUSER.DAT")
 
 # Checking hives exist & opening to extract keys & values
 if os.path.isfile(sysHive):
 	SYSTEM = RegistryHive(sysHive)
 else:
-	print("File '"+sysHive+" ' does not exist")
+	print("SYSTEM Hive '"+sysHive+" ' does not exist")
 	print()
 	printHelp()
 	sys.exit()
 if os.path.isfile(swHive):
 	SOFTWARE = RegistryHive(swHive)
 	swflag=True
+else:
+	print("SOFTWARE Hive not being parsed")
 NTUSER=[]
+if not userHives:
+	print("User hives not being parsed")
 for kuh in userHives:
 	if os.path.isfile(kuh):
 		NTUSER.append(RegistryHive(kuh))
