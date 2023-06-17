@@ -126,7 +126,7 @@ def outputCSV(dev):
 				oconn = khyocn
 			else:
 				oconn += "|"+khyocn
-		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+khyocn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+uacc)
+		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+uacc)
 
 # Function to output parsed data as Key/Value pairs
 def outputKV(dev):
@@ -232,7 +232,7 @@ NTUSER=[]
 if not userHives:
 	print("User hives not being parsed")
 for kuh in userHives:
-	if os.path.isfile(kuh):
+	if os.path.isfile(kuh) and not "Default" in kuh:
 		NTUSER.append(RegistryHive(kuh))
 		ntuflag=True
 
@@ -251,9 +251,12 @@ for kusbstorkey in SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\U
 		#Get device friendly name
 		newDev.name = kusbstorsnkey.get_value('FriendlyName')
 		
-		#Get device serial number
-		if kusbstorsnkey.name.endswith('&0'):
-			newDev.iSerialNumber = kusbstorsnkey.name[:-2]
+		#Get device serial number, removing all after the last '&' character, including the '&' itself
+		amp = kusbstorsnkey.name.find('&', 2)
+		remove = len(kusbstorsnkey.name)-amp
+		
+		if amp > 0:
+			newDev.iSerialNumber = kusbstorsnkey.name[:-remove]
 		else:
 			newDev.iSerialNumber = kusbstorsnkey.name
 		
@@ -288,7 +291,7 @@ for kusbkey in SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\USB")
 						
 						#Get Disk ID to map to Volume name
 						khyzDev.setDiskId(SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\SCSI\\" + kscsikey.name + "\\" + kscsisubkey.name + "\\Device Parameters\\Partmgr").get_value('DiskId'))
-						print(khyzDev.getDiskId())
+						
 						#Get device timestamps (if present)
 						khyzDev.firstConnected = getTime(SYSTEM, "SYSTEM\\" + khycurrentcontrolset + "\\Enum\\SCSI\\" + kscsikey.name + "\\" + kscsisubkey.name + "\\Properties\\{83da6326-97a6-4088-9453-a1923f573b29}\\0064")
 						khyzDev.lastConnected = getTime(SYSTEM, "SYSTEM\\" + khycurrentcontrolset + "\\Enum\\SCSI\\" + kscsikey.name + "\\" + kscsisubkey.name + "\\Properties\\{83da6326-97a6-4088-9453-a1923f573b29}\\0066")
@@ -300,7 +303,7 @@ for kusbkey in SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\USB")
 
 # Iterating over SYSTEM\MountedDevices key to determine last mounted drive letters...
 for kmdval in SYSTEM.get_key("SYSTEM\MountedDevices").get_values():
-	if kmdval.name.startswith('\DosDevices\\'):
+	if kmdval.name.startswith('\DosDevices\\'):		
 		try:
 			khexmd=hexlify(kmdval.value)
 			for d in devices:
@@ -327,6 +330,7 @@ for kmdval in SYSTEM.get_key("SYSTEM\MountedDevices").get_values():
 						for NTU in NTUSER:
 							#Getting user account name from NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop
 							kusername=NTU.get_key('NTUSER.DAT\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders').get_value('Desktop')
+							
 							#Output is of format C:\Users\<user>\Desktop -> extracting username
 							kusername=kusername.split('\\')[2]
 							
