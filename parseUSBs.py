@@ -72,13 +72,19 @@ class ExternalDevice:
 		
 # Function to display help info
 def printHelp():
-	print('Usage: parseUSBs.py <options>')
+	print('Usage: python3 parseUSBs.py <options>')
 	print('Options:')
 	print('	-h 			Print this help message')
-	print('	-s <SYSTEM hive>')
-	print('	-w <SOFTWARE hive>	This argument is optional. If omitted, some drive letters and volumes names may be missing in the output')
-	print('	-u <NTUSER.dat hive> 	This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made')
+	print('	-s <SYSTEM hive>	Parse this SYSTEM hive')
+	print('	-u <NTUSER.dat hive> 	Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided.')
+	print('				If omitted, connections to user accounts won\'t be made')
+	print('	-w <SOFTWARE hive>	Parse this SOFTWARE HIVE. This argument is optional.')
+	print('				If omitted, some drive letters and volume names may be missing in the output')
 	print('	-o <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs')
+	print()
+	print('Example commands:')
+	print('python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv')
+	print('python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER.DAT_user1 -u NTUSER.DAT_user2')
 	print()
 	print('Copyright 2023 Kathryn Hedley, Khyrenz Ltd')
 	print()
