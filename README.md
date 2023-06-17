@@ -44,7 +44,6 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
 
 **Example Usage:**  
     python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT  
-    python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv
-    
-    (In Windows CMD:) python3 parseUSBs.py -v F:
-    (on WSL:) python3 parseUSBs.py -v /mnt/f
+    python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv  
+    (In Windows CMD:) python3 parseUSBs.py -v F:  
+    (on WSL:) python3 parseUSBs.py -v /mnt/f  
