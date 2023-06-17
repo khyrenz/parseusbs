@@ -213,7 +213,6 @@ if kmtvol:
 	if os.path.exists(kmtvol+"Users"):
 		userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
 		for usrdir in userfolders:
-			print(usrdir+"/NTUSER.DAT")
 			userHives.append(usrdir+"/NTUSER.DAT")
 
 # Checking hives exist & opening to extract keys & values
