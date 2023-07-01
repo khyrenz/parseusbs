@@ -21,12 +21,15 @@
 ## pip3 install regipy
 
 # Limitations:
-## Does not clean dirty hives - please play back transaction logs before running this tool
+## Only parses provided Registry hives; does not parse any other artefacts
+## Will only replay transaction logs if they're in the same folder as the provided Hive
 
 # Importing libraries
 import sys, os
 from datetime import datetime,timedelta
 from regipy.registry import RegistryHive
+from regipy.recovery import apply_transaction_logs
+from regipy.utils import calculate_xor32_checksum
 from binascii import hexlify
 
 #Defining object for a USB device
@@ -151,14 +154,48 @@ def snInDevArray(ksn, kdevarr):
 			return True
 	return False
 	
+# Function to check for dirty Registry Hive
+def is_dirty(khv):	
+	if khv.header.primary_sequence_num != khv.header.secondary_sequence_num:
+		print(khv.name.split('\\')[-1] + " is dirty! Sequence numbers don't match; applying transaction logs...")
+		return True
+		
+	chksum = calculate_xor32_checksum(khv._stream.read(508))
+	if khv.header.checksum != chksum:
+		print(khv.name.split('\\')[-1] + " is dirty! Checksum doesn't match; applying transaction logs...")
+		return True
+	
+	print(khv.name.split('\\')[-1] + " is clean")
+	return False
+
+# Function to replay transaction logs
+# Uses regipy apply_transaction_logs(hive_path, primary_log_path, secondary_log_path=None, restored_hive_path=None, verbose=False)
+def replay_logs(khvpath):
+	#Looking for log files in same path as hive
+	print("Looking for LOG files: "+khvpath+".LOG1 & "+khvpath+".LOG2 in same location as "+khvpath)
+	log1=log2=""
+	logsexist=False
+	if os.path.exists(khvpath+".LOG1"):
+		log1=khvpath+".LOG1"
+		logsexist=True
+	if os.path.exists(khvpath+".LOG2"):
+		log2=khvpath+".LOG2"
+		logsexist=True
+	
+	if logsexist:
+		updatedhive=None
+		updatedhive, dirtypagecount = apply_transaction_logs(khvpath, log1, log2, updatedhive, False)
+		print("Updated hive created: "+updatedhive)
+		return RegistryHive(updatedhive)
+	else:
+		print("Log files not found - dirty hive is being processed")
+		return RegistryHive(khvpath)
 
 
 ### MAIN function ###
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
 print("Copyright 2023 Kathryn Hedley, Khyrenz Ltd")
-print()
-print("*INFO*: This tool does not have capability to clean dirty hives. Please play back transaction logs before execution")
 
 # Check & parse passed-in arguments
 next=""
@@ -218,6 +255,9 @@ if kmtvol:
 # Checking hives exist & opening to extract keys & values
 if os.path.isfile(sysHive):
 	SYSTEM = RegistryHive(sysHive)
+	#Checking if hive is dirty
+	if is_dirty(SYSTEM):
+		SYSTEM = replay_logs(sysHive)
 else:
 	print("SYSTEM Hive '"+sysHive+" ' does not exist")
 	print()
@@ -226,6 +266,9 @@ else:
 if os.path.isfile(swHive):
 	SOFTWARE = RegistryHive(swHive)
 	swflag=True
+	#Checking if hive is dirty
+	if is_dirty(SOFTWARE):
+		SOFTWARE = replay_logs(swHive)
 else:
 	print("SOFTWARE Hive not being parsed")
 NTUSER=[]
@@ -233,8 +276,14 @@ if not userHives:
 	print("User hives not being parsed")
 for kuh in userHives:
 	if os.path.isfile(kuh) and not "Default" in kuh:
-		NTUSER.append(RegistryHive(kuh))
+		nthv=RegistryHive(kuh)
+		#Checking if hive is dirty
+		if is_dirty(nthv):
+			nthv = replay_logs(kuh)
+		#Appending hive to list
+		NTUSER.append(nthv)
 		ntuflag=True
+		#Checking if hive is dirty
 
 #initialising empty array to store device values & removing empty value that's added
 devices = []
