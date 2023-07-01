@@ -28,7 +28,8 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
 
 
 **Limitations:**  
-  Does not clean dirty hives - please play back transaction logs before running this tool  
+  Only parses provided Registry hives; does not parse any other artefacts  
+  Will only replay transaction logs if they're in the same folder as the provided Hive 
 
 
 **Usage:**  
