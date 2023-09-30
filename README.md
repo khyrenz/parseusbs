@@ -12,10 +12,10 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
 
 
 **Extracts from the following keys/values:**  
-  SYSTEM\Select\Current -> to get kcurrentcontrolset  
-  SYSTEM\kcurrentcontrolset\Enum\USB  
-  SYSTEM\kcurrentcontrolset\Enum\USBSTOR  
-  SYSTEM\kcurrentcontrolset\Enum\SCSI  
+  SYSTEM\Select\Current -> to get CurrentControlSet  
+  SYSTEM\CurrentControlSet\Enum\USB  
+  SYSTEM\CurrentControlSet\Enum\USBSTOR  
+  SYSTEM\CurrentControlSet\Enum\SCSI  
   SYSTEM\MountedDevices  
   SOFTWARE\Microsoft\Windows Portable Devices\Devices  
   SOFTWARE\Microsoft\Windows Search\VolumeInfoCache  
