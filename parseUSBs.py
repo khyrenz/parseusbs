@@ -2,20 +2,23 @@
 
 # Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives
 # Author: Kathryn Hedley, khedley@khyrenz.com
-# Copyright 2023 Kathryn Hedley, Khyrenz Ltd
+# Copyright 2024 Kathryn Hedley, Khyrenz Ltd
 
 # Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy
 
 # Extracts from the following keys/values:
-## SYSTEM\Select\Current -> to get CurrentControlSet
-## SYSTEM\CurrentControlSet\Enum\USB
-## SYSTEM\CurrentControlSet\Enum\USBSTOR
-## SYSTEM\CurrentControlSet\Enum\SCSI
+## SYSTEM\Select\Current -> to get kcurrentcontrolset
+## SYSTEM\kcurrentcontrolset\Enum\USB
+## SYSTEM\kcurrentcontrolset\Enum\USBSTOR
+## SYSTEM\kcurrentcontrolset\Enum\SCSI
 ## SYSTEM\MountedDevices
 ## SOFTWARE\Microsoft\Windows Portable Devices\Devices
 ## SOFTWARE\Microsoft\Windows Search\VolumeInfoCache
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2
+
+# Bypasses Windows permission errors on a mounted volume using chmod
+## This only works if you're running the Terminal window as Administrator
 
 # Dependencies:
 ## pip3 install regipy
@@ -25,7 +28,7 @@
 ## Will only replay transaction logs if they're in the same folder as the provided Hive
 
 # Importing libraries
-import sys, os
+import sys, os, stat, ctypes, platform
 from datetime import datetime,timedelta
 from regipy.registry import RegistryHive
 from regipy.recovery import apply_transaction_logs
@@ -84,17 +87,20 @@ def printHelp():
 	print('	-v <drive letter>	Parse this mounted volume')
 	print('				Use either this "-v" option or the individual hive options.')
 	print('				If this option is provided, "-s|-u|-w" options will be ignored')
+	print('				*IMPORTANT*: Please make sure you are running this script in a terminal window that is running')
+	print('				as Administrator to auto-bypass Windows permission issues')
 	print('	-w <SOFTWARE hive>	Parse this SOFTWARE HIVE. This argument is optional.')
 	print('				If omitted, some drive letters and volume names may be missing in the output')
 	print('	-o <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs')
 	print()
 	print('Example commands:')
-	print('python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv')
+	print('python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE')
+	print('-u C:/Users/user1/NTUSER.DAT -o csv')
 	print('python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER.DAT_user1 -u NTUSER.DAT_user2')
-	print('(In Windows CMD:) python3 parseUSBs.py -v F:')
-	print('(On WSL:) python3 parseUSBs.py -v /mnt/f')
+	print('(In Windows CMD as Administrator:) python3 parseUSBs.py -v F:')
+	print('(On WSL as Administrator:) python3 parseUSBs.py -v /mnt/f')
 	print()
-	print('Copyright 2023 Kathryn Hedley, Khyrenz Ltd')
+	print('Copyright 2024 Kathryn Hedley, Khyrenz Ltd')
 	print()
 
 # Function to convert Key Last Write timestamp to readable format
@@ -190,11 +196,38 @@ def replay_logs(khvpath):
 		print("Log files not found - dirty hive is being processed")
 		return RegistryHive(khvpath)
 
+# Function to change permissions on a folder to allow Registry hives to be accessed
+def pychmod(kpath):
+	try:
+		if os.path.exists(kpath):
+			os.chmod(kpath, 0o777)
+			print("Permissions modified successfully on path: "+kpath)
+		else:
+			print("Path not found:", kpath)
+	except PermissionError:
+		print("Error: Permissions could not be changed on the folder:", kpath)
+		print("**Please check you are running your Terminal as an Administrator**")
+		print()
+		sys.exit()
+
+# Function to check python is running in an admin terminal
+def isAdmin():
+	try:
+		if 'wsl' in platform.platform().lower():
+			# Cannot determine if running as admin, so default to True
+			return True
+		elif platform.platform().lower().startswith('linux'):
+			return os.getuid() == 0
+		elif platform.platform().lower().startswith('windows'):
+			return ctypes.windll.shell32.IsUserAnAdmin() != 0
+	# Default to False
+	finally:
+		return False
 
 ### MAIN function ###
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
-print("Copyright 2023 Kathryn Hedley, Khyrenz Ltd")
+print("Copyright 2024 Kathryn Hedley, Khyrenz Ltd")
 
 # Check & parse passed-in arguments
 next=""
@@ -241,14 +274,21 @@ for karg in sys.argv:
 if kmtvol:
 	if not kmtvol.endswith("/"):
 		kmtvol = kmtvol + "/"
-		
-	sysHive=kmtvol+"Windows/System32/config/SYSTEM"
-	swHive=kmtvol+"Windows/System32/config/SOFTWARE"
+
+	sysconfdir=kmtvol+"Windows/System32/config"
+	#Changing Windows permissions to allow access to each system hive
+	pychmod(sysconfdir)
+	
+	sysHive=sysconfdir+"/SYSTEM"
+	swHive=sysconfdir+"/SOFTWARE"
 	userHives=[]
 	
 	if os.path.exists(kmtvol+"Users"):
 		userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
 		for usrdir in userfolders:
+			#Changing Windows permissions to allow access to each NTUSER hive
+			pychmod(usrdir)
+			#Store paths to NTUSER hives
 			userHives.append(usrdir+"/NTUSER.DAT")
 
 # Checking hives exist & opening to extract keys & values
