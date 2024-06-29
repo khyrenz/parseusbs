@@ -22,7 +22,7 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop  
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2  
 
-**Bypasses Windows permission errors on a mounted volume using chmod**
+**Bypasses Windows permission errors on a mounted volume using chmod**  
   This only works if you're running the Terminal window as Administrator
 
 **Dependencies:**  
