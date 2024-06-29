@@ -4,7 +4,7 @@ Parses USB connection artifacts from offline Registry hives
 
 Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives  
 Author: Kathryn Hedley, khedley@khyrenz.com  
-Copyright 2023 Kathryn Hedley, Khyrenz Ltd  
+Copyright 2024 Kathryn Hedley, Khyrenz Ltd  
 
 
 Runs in Python3  
@@ -22,6 +22,8 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop  
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2  
 
+**Bypasses Windows permission errors on a mounted volume using chmod**
+  This only works if you're running the Terminal window as Administrator
 
 **Dependencies:**  
   pip3 install regipy  
@@ -46,5 +48,5 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
 **Example Usage:**  
     python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT  
     python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv  
-    (In Windows CMD:) python3 parseUSBs.py -v F:  
-    (on WSL:) python3 parseUSBs.py -v /mnt/f  
+    (In Windows CMD as Administrator:) python3 parseUSBs.py -v F:  
+    (on WSL as Administrator:) python3 parseUSBs.py -v /mnt/f  
