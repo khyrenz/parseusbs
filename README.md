@@ -9,6 +9,7 @@ Copyright 2024 Kathryn Hedley, Khyrenz Ltd
 
 Runs in Python3  
 Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy  
+Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/
 
 
 **Extracts from the following keys/values:**  
@@ -22,16 +23,20 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop  
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2  
 
+Parses the following Event Logs:
+  Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
+
 **Bypasses Windows permission errors on a mounted volume using chmod**  
   This only works if you're running the Terminal window as Administrator
 
 **Dependencies:**  
-  pip3 install regipy  
+  pip3 install regipy python-evtx
 
 
 **Limitations:**  
   Only parses provided Registry hives; does not parse any other artefacts  
   Will only replay transaction logs if they're in the same folder as the provided Hive 
+  Does not detect or clean dirty event logs
 
 
 **Usage:**  
@@ -41,7 +46,7 @@ Uses regipy offline hive parser library from Martin G. Korman: https://github.co
 	-h 		          	- Print this help message  
 	-s    <SYSTEM hive>  		- Parse this SYSTEM hive    
 	-u    <NTUSER.dat hive> 	- Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made   
- 	-v    <drive letter>		- Parse this mounted volume. Use either this "-v" option or the individual hive options. If this option is provided, "-s|-u|-w" options will be ignored    
+ 	-v    <drive letter>		- Parse this mounted volume. Use either this "-v" option or the individual hive options. Using this option means the Windows Partition Diagnostic Event Log will also be parsed. If this option is provided, "-s|-u|-w" options will be ignored. *IMPORTANT*: Please make sure you are running this script in a terminal window that is running as Administrator to auto-bypass Windows permission issues 
  	-w    <SOFTWARE hive>	 	- Parse this SOFTWARE hive. This argument is optional. If omitted, some drive letters and volumes names may be missing in the output  
 	-o    <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs  
 

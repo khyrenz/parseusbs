@@ -5,8 +5,9 @@
 # Copyright 2024 Kathryn Hedley, Khyrenz Ltd
 
 # Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy
+# Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/
 
-# Extracts from the following keys/values:
+# Extracts from the following Registry keys/values:
 ## SYSTEM\Select\Current -> to get kcurrentcontrolset
 ## SYSTEM\kcurrentcontrolset\Enum\USB
 ## SYSTEM\kcurrentcontrolset\Enum\USBSTOR
@@ -17,19 +18,25 @@
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2
 
+#Parses the following Event Logs:
+## Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
+
 # Bypasses Windows permission errors on a mounted volume using chmod
 ## This only works if you're running the Terminal window as Administrator
 
 # Dependencies:
-## pip3 install regipy
+## pip3 install regipy python-evtx
 
 # Limitations:
-## Only parses provided Registry hives; does not parse any other artefacts
-## Will only replay transaction logs if they're in the same folder as the provided Hive
+## Only parses Registry hives & Event Logs; does not parse any other artefacts
+## Will only replay Registry transaction logs if they're in the same folder as the provided hive
+## Does not detect or clean dirty event logs
 
 # Importing libraries
-import sys, os, stat, ctypes, platform
-from datetime import datetime,timedelta
+import sys, os, stat, ctypes, platform, base64
+import Evtx.Evtx as evtx
+from xml.dom import minidom
+from datetime import datetime,timedelta,timezone
 from regipy.registry import RegistryHive
 from regipy.recovery import apply_transaction_logs
 from regipy.utils import calculate_xor32_checksum
@@ -49,6 +56,7 @@ class ExternalDevice:
 		self.volumeName = ""
 		self.diskId = ""
 		self.userAccounts = []
+		self.volumeSerials = []
 
 	# method to set other connection time
 	def addOtherConnection(self, khyoc):
@@ -74,6 +82,12 @@ class ExternalDevice:
 	# method to get user accounts
 	def getUsers(self):
 		return self.userAccounts
+	# method to add volume serial number
+	def addVsn(self, khyvsn):
+		self.volumeSerials.append(khyvsn)
+	# method to get volume serial numbers
+	def getVsns(self):
+		return self.volumeSerials
 
 		
 # Function to display help info
@@ -86,6 +100,7 @@ def printHelp():
 	print('				If omitted, connections to user accounts won\'t be made')
 	print('	-v <drive letter>	Parse this mounted volume')
 	print('				Use either this "-v" option or the individual hive options.')
+	print('				Using this option means the Windows Partition Diagnostic Event Log will also be parsed.')
 	print('				If this option is provided, "-s|-u|-w" options will be ignored')
 	print('				*IMPORTANT*: Please make sure you are running this script in a terminal window that is running')
 	print('				as Administrator to auto-bypass Windows permission issues')
@@ -106,7 +121,7 @@ def printHelp():
 # Function to convert Key Last Write timestamp to readable format
 # Usage - convertWin64time(kusbstorkey.header.last_modified)
 def convertWin64time(khyts):
-	return (datetime(1601, 1, 1) + timedelta(microseconds=(khyts//10))).isoformat()
+	return (datetime(1601, 1, 1) + timedelta(microseconds=(khyts//10))).replace(tzinfo=timezone.utc).isoformat()
 
 # Function to get timestamp value (if present) as readable timestamp
 def getTime(reg, regkey):
@@ -118,8 +133,8 @@ def getTime(reg, regkey):
 
 # Function to output parsed data as CSV
 def outputCSV(dev):
-	print('Value:,Device Friendly Name,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,LastDriveLetter,VolumeName,UserAccounts')
-	print('Key:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache,MountedDevices/Windows Portable Devices,Windows Portable Devices,NTUSER-MountPoints2')
+	print('Value:,Device Friendly Name,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts')
+	print('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache,MountedDevices/Windows Portable Devices,Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2')
 	
 	for khyd in dev:
 		uacc=""
@@ -134,7 +149,13 @@ def outputCSV(dev):
 				oconn = khyocn
 			else:
 				oconn += "|"+khyocn
-		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+uacc)
+		vsns=""
+		for khyvs in khyd.volumeSerials:
+			if vsns == "":
+				vsns = khyvs
+			else:
+				vsns += "|"+khyvs
+		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc)
 
 # Function to output parsed data as Key/Value pairs
 def outputKV(dev):
@@ -148,6 +169,8 @@ def outputKV(dev):
 			print("Other Connection:", khyocn)
 		print("Last Drive Letter:", khyd.lastDriveLetter)
 		print("Volume Name:", khyd.volumeName)
+		for khyvs in khyd.volumeSerials:
+			print("VSN:", khyvs)
 		for khyu in khyd.userAccounts:
 			print("User Account:", khyu)
 		print()
@@ -224,6 +247,65 @@ def isAdmin():
 	finally:
 		return False
 
+# Function to get filesystem type from hex VBR
+def getFSFromVbr(khexvbr):
+	fstype=hexToText(khexvbr[6:21])
+	if fstype.startswith("EXFAT"):
+		return "ExFAT"
+	elif fstype.startswith("NTFS"):
+		return "NTFS"
+
+	fstype=hexToText(khexvbr[164:180])
+	if fstype.startswith("FAT"):
+		return fstype.strip()
+
+	return ""
+
+# Function to get VSN from VBR depending on filesystem type offset
+def getVsnFromVbr(khexvbr):
+	kfstype=getFSFromVbr(khexvbr)
+	vbrvsnoffset=0
+	vbrvsnsize=4
+	#Getting VSN offset & size (where not 4)
+	if kfstype.startswith("ExFAT"):
+		vbrvsnoffset=100
+	elif kfstype.startswith("NTFS"):
+		vbrvsnoffset=72
+		vbrvsnsize=8
+	elif kfstype.startswith("FAT"):
+		vbrvsnoffset=67
+	
+	if vbrvsnoffset > 0:
+		khyvsn=khexvbr[(vbrvsnoffset*2):((vbrvsnoffset+vbrvsnsize)*2)]
+		return(flipEndianness(khyvsn)+" (" +kfstype+")")
+	else:
+		return ""
+
+# Function to change endianness of a hex string
+def flipEndianness(khexstr):
+	outstr=""
+	try:
+		for i in range(len(khexstr),0,-2):
+			outstr=outstr+khexstr[i-2:i]
+	finally:
+		return outstr
+
+# Function to convert hex string to ascii text
+def hexToText(khyhexstr):
+	outstr=""
+	for i in range(0,len(khyhexstr),2):
+		outstr=outstr+chr(int(khyhexstr[i : i + 2], 16))
+	return outstr
+
+# Function to strip out prepended data from S/N if UASP device
+def stripUaspMarker(ksn):
+	umarker="MSFT30"
+	if ksn.startswith(umarker):
+		return ksn[len(umarker):]
+	else:
+		return ksn
+	
+
 ### MAIN function ###
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
@@ -290,6 +372,10 @@ if kmtvol:
 			pychmod(usrdir)
 			#Store paths to NTUSER hives
 			userHives.append(usrdir+"/NTUSER.DAT")
+
+#Event log to parse to get USB connections
+usbEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Partition%4Diagnostic.evtx"
+usbEvtId='1006'
 
 # Checking hives exist & opening to extract keys & values
 if os.path.isfile(sysHive):
@@ -475,7 +561,83 @@ for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfo
 			if not exists:
 				d.addOtherConnection(klwtime)
 				break
+
+# Parsing event log
+print("Opening: ", usbEvtx)
+with evtx.Evtx(usbEvtx) as evtxlog:
+	for evtxrecord in evtxlog.records():
+		#print(evtxrecord.xml())
+		root = minidom.parseString(evtxrecord.xml())
+		eId=""
+		eTime=""
+		parent=""
+		sn=""
+		make=""
+		model=""
+		vsn=""
+
+		#Getting Event ID & time	
+		sysinfo = root.getElementsByTagName('System')[0]
+		eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
 		
+		if eId == usbEvtId:
+			eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
+			
+			elements = root.getElementsByTagName('Data')
+			for element in elements:
+				if element.attributes['Name'].value == "ParentId":
+					try:
+						parent = element.firstChild.nodeValue
+						#get Serial number in ParentId - everything after last '\'
+						parent_sn = stripUaspMarker(element.firstChild.nodeValue[element.firstChild.nodeValue.rindex('\\')+1:])
+					except:
+						pass
+				if element.attributes['Name'].value == "SerialNumber":
+					try:
+						sn = stripUaspMarker(element.firstChild.nodeValue)
+					except:
+						pass
+				if element.attributes['Name'].value == "Manufacturer":
+					try:
+						make = element.firstChild.nodeValue
+					except:
+						pass
+				if element.attributes['Name'].value == "Model":
+					try:
+						model = element.firstChild.nodeValue
+					except:
+						pass
+				if element.attributes['Name'].value == "Vbr0":
+					try:
+						hexvbr = base64.b64decode(element.firstChild.nodeValue).hex()
+						vsn=getVsnFromVbr(hexvbr)
+					except:
+						pass
+			if parent.startswith("USB\\"):
+				#Matching this event info with Registry info for this device
+				for d in devices:
+					if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
+						#Adding info to device record - if not already present
+						exists=False
+						isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
+						for c in d.getOtherConnections():
+							if c == isoETime:
+								exists=True
+								break
+						if not exists:
+							d.addOtherConnection(isoETime)
+						
+						exists=False
+						for c in d.getVsns():
+							if c == vsn:
+								exists=True
+								break
+						if (not exists) and not (vsn == "None") and not (vsn == ""):
+							d.addVsn(vsn)
+							
+						#Checking for other info gaps from the Registry
+						if d.name == "":
+							d.name = make + " " + model
 
 #Print output in CSV or key-value pair format
 print()
