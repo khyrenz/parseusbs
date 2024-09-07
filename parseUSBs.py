@@ -575,96 +575,97 @@ for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfo
 				d.addOtherConnection(klwtime)
 				break
 
-# Parsing event log for connection & disconnection events (both EID 1006)
-print("Opening: ", usbEvtx)
-with evtx.Evtx(usbEvtx) as evtxlog:
-	for evtxrecord in evtxlog.records():
-		#print(evtxrecord.xml())
-		root = minidom.parseString(evtxrecord.xml())
-		eId=""
-		eTime=""
-		parent=""
-		sn=""
-		make=""
-		model=""
-		vsn=""
-		connect=False
-		disconnect=False
+#if volume option is provided, find & parse event log for connection & disconnection events (both EID 1006)
+if kmtvol:
+	print("Opening: ", usbEvtx)
+	with evtx.Evtx(usbEvtx) as evtxlog:
+		for evtxrecord in evtxlog.records():
+			#print(evtxrecord.xml())
+			root = minidom.parseString(evtxrecord.xml())
+			eId=""
+			eTime=""
+			parent=""
+			sn=""
+			make=""
+			model=""
+			vsn=""
+			connect=False
+			disconnect=False
 
-		#Getting Event ID & time	
-		sysinfo = root.getElementsByTagName('System')[0]
-		eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
-		
-		if eId == usbEvtId:
-			eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
+			#Getting Event ID & time	
+			sysinfo = root.getElementsByTagName('System')[0]
+			eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
 			
-			elements = root.getElementsByTagName('Data')
-			for element in elements:
-				if element.attributes['Name'].value == "ParentId":
-					try:
-						parent = element.firstChild.nodeValue
-						#get Serial number in ParentId - everything after last '\'
-						parent_sn = stripUaspMarker(element.firstChild.nodeValue[element.firstChild.nodeValue.rindex('\\')+1:])
-					except:
-						pass
-				if element.attributes['Name'].value == "SerialNumber":
-					try:
-						sn = stripUaspMarker(element.firstChild.nodeValue)
-					except:
-						pass
-				if element.attributes['Name'].value == "Manufacturer":
-					try:
-						make = element.firstChild.nodeValue
-					except:
-						pass
-				if element.attributes['Name'].value == "Model":
-					try:
-						model = element.firstChild.nodeValue
-					except:
-						pass
-				if element.attributes['Name'].value == "Vbr0":
-					try:
-						hexvbr = base64.b64decode(element.firstChild.nodeValue).hex()
-						vsn=getVsnFromVbr(hexvbr)
-						#Only USB connection EID 1006 events log the VBR, not disconnection events
-						connect=True
-					except:
-						#No VBR in event entry, so this is a disconnection event
-						disconnect=True
-						pass
-			if parent.startswith("USB\\"):
-				#Matching this event info with Registry info for this device
-				for d in devices:
-					if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
-						#Adding info to device record - if not already present
-						exists=False
-						isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
-						if connect:
-							for c in d.getOtherConnections():
-								if c == isoETime:
-									exists=True
-									break
-							if not exists:
-								d.addOtherConnection(isoETime)
-						if disconnect:
-							for c in d.getOtherDisconnections():
-								if c == isoETime:
-									exists=True
-									break
-							if not exists:
-								d.addOtherDisconnection(isoETime)
-						
-						exists=False
-						for c in d.getVsns():
-							if c == vsn:
-								exists=True
-								break
-						if (not exists) and not (vsn == "None") and not (vsn == ""):
-							d.addVsn(vsn)
+			if eId == usbEvtId:
+				eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
+				
+				elements = root.getElementsByTagName('Data')
+				for element in elements:
+					if element.attributes['Name'].value == "ParentId":
+						try:
+							parent = element.firstChild.nodeValue
+							#get Serial number in ParentId - everything after last '\'
+							parent_sn = stripUaspMarker(element.firstChild.nodeValue[element.firstChild.nodeValue.rindex('\\')+1:])
+						except:
+							pass
+					if element.attributes['Name'].value == "SerialNumber":
+						try:
+							sn = stripUaspMarker(element.firstChild.nodeValue)
+						except:
+							pass
+					if element.attributes['Name'].value == "Manufacturer":
+						try:
+							make = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "Model":
+						try:
+							model = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "Vbr0":
+						try:
+							hexvbr = base64.b64decode(element.firstChild.nodeValue).hex()
+							vsn=getVsnFromVbr(hexvbr)
+							#Only USB connection EID 1006 events log the VBR, not disconnection events
+							connect=True
+						except:
+							#No VBR in event entry, so this is a disconnection event
+							disconnect=True
+							pass
+				if parent.startswith("USB\\"):
+					#Matching this event info with Registry info for this device
+					for d in devices:
+						if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
+							#Adding info to device record - if not already present
+							exists=False
+							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
+							if connect:
+								for c in d.getOtherConnections():
+									if c == isoETime:
+										exists=True
+										break
+								if not exists:
+									d.addOtherConnection(isoETime)
+							if disconnect:
+								for c in d.getOtherDisconnections():
+									if c == isoETime:
+										exists=True
+										break
+								if not exists:
+									d.addOtherDisconnection(isoETime)
 							
-						#Checking for other info gaps from the Registry
-						if d.name == "":
-							d.name = make + " " + model
+							exists=False
+							for c in d.getVsns():
+								if c == vsn:
+									exists=True
+									break
+							if (not exists) and not (vsn == "None") and not (vsn == ""):
+								d.addVsn(vsn)
+								
+							#Checking for other info gaps from the Registry
+							if d.name == "":
+								d.name = make + " " + model
 
 #Print output in CSV or key-value pair format
 print()
