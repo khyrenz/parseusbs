@@ -34,8 +34,8 @@ Parses the following Event Logs:
 
 
 **Limitations:**  
-  Only parses provided Registry hives; does not parse any other artefacts  
-  Will only replay transaction logs if they're in the same folder as the provided Hive 
+  Only parses provided Registry hives and the Microsoft-Windows-Partition%4Diagnostic.evtx event log; does not parse any other artefacts  
+  Will only replay transaction logs for Registry hives if they're in the same folder as the provided hive 
   Does not detect or clean dirty event logs
 
 

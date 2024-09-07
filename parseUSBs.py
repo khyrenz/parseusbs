@@ -52,6 +52,7 @@ class ExternalDevice:
 		self.lastConnected = ""
 		self.lastRemoved = ""
 		self.otherConnection = []
+		self.otherDisconnection = []
 		self.lastDriveLetter = ""
 		self.volumeName = ""
 		self.diskId = ""
@@ -64,6 +65,12 @@ class ExternalDevice:
 	# method to get other connection timestamps
 	def getOtherConnections(self):
 		return self.otherConnection
+	# method to set other disconnection time
+	def addOtherDisconnection(self, khyoc):
+		self.otherDisconnection.append(khyoc)
+	# method to get other disconnection timestamps
+	def getOtherDisconnections(self):
+		return self.otherDisconnection
 	# method to set last drive letter
 	def setLastDriveLetter(self, khydl):
 		self.lastDriveLetter = khydl
@@ -133,8 +140,8 @@ def getTime(reg, regkey):
 
 # Function to output parsed data as CSV
 def outputCSV(dev):
-	print('Value:,Device Friendly Name,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts')
-	print('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache,MountedDevices/Windows Portable Devices,Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2')
+	print('Value:,DeviceFriendlyName,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,OtherDisconnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts')
+	print('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache/Microsoft-Windows-Partition%4Diagnostic.evtx,Microsoft-Windows-Partition%4Diagnostic.evtx,SYSTEM-MountedDevices/SOFTWARE-Windows Portable Devices,SOFTWARE-VolumeInfoCache/SOFTWARE-Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2')
 	
 	for khyd in dev:
 		uacc=""
@@ -149,13 +156,19 @@ def outputCSV(dev):
 				oconn = khyocn
 			else:
 				oconn += "|"+khyocn
+		dconn=""
+		for khydcn in khyd.otherDisconnection:
+			if dconn == "":
+				dconn = khydcn
+			else:
+				dconn += "|"+khydcn
 		vsns=""
 		for khyvs in khyd.volumeSerials:
 			if vsns == "":
 				vsns = khyvs
 			else:
 				vsns += "|"+khyvs
-		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc)
+		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc)
 
 # Function to output parsed data as Key/Value pairs
 def outputKV(dev):
@@ -167,6 +180,8 @@ def outputKV(dev):
 		print("Last Removed:", khyd.lastRemoved)
 		for khyocn in khyd.otherConnection:
 			print("Other Connection:", khyocn)
+		for khydcn in khyd.otherDisconnection:
+			print("Other Disconnection:", khydcn)
 		print("Last Drive Letter:", khyd.lastDriveLetter)
 		print("Volume Name:", khyd.volumeName)
 		for khyvs in khyd.volumeSerials:
@@ -562,7 +577,7 @@ for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfo
 				d.addOtherConnection(klwtime)
 				break
 
-# Parsing event log
+# Parsing event log for connection & disconnection events (both EID 1006)
 print("Opening: ", usbEvtx)
 with evtx.Evtx(usbEvtx) as evtxlog:
 	for evtxrecord in evtxlog.records():
@@ -575,6 +590,8 @@ with evtx.Evtx(usbEvtx) as evtxlog:
 		make=""
 		model=""
 		vsn=""
+		connect=False
+		disconnect=False
 
 		#Getting Event ID & time	
 		sysinfo = root.getElementsByTagName('System')[0]
@@ -611,7 +628,11 @@ with evtx.Evtx(usbEvtx) as evtxlog:
 					try:
 						hexvbr = base64.b64decode(element.firstChild.nodeValue).hex()
 						vsn=getVsnFromVbr(hexvbr)
+						#Only USB connection EID 1006 events log the VBR, not disconnection events
+						connect=True
 					except:
+						#No VBR in event entry, so this is a disconnection event
+						disconnect=True
 						pass
 			if parent.startswith("USB\\"):
 				#Matching this event info with Registry info for this device
@@ -620,12 +641,20 @@ with evtx.Evtx(usbEvtx) as evtxlog:
 						#Adding info to device record - if not already present
 						exists=False
 						isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
-						for c in d.getOtherConnections():
-							if c == isoETime:
-								exists=True
-								break
-						if not exists:
-							d.addOtherConnection(isoETime)
+						if connect:
+							for c in d.getOtherConnections():
+								if c == isoETime:
+									exists=True
+									break
+							if not exists:
+								d.addOtherConnection(isoETime)
+						if disconnect:
+							for c in d.getOtherDisconnections():
+								if c == isoETime:
+									exists=True
+									break
+							if not exists:
+								d.addOtherDisconnection(isoETime)
 						
 						exists=False
 						for c in d.getVsns():
