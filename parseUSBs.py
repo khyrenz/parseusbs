@@ -122,8 +122,6 @@ def printHelp():
 	print('(In Windows CMD as Administrator:) python3 parseUSBs.py -v F:')
 	print('(On WSL as Administrator:) python3 parseUSBs.py -v /mnt/f')
 	print()
-	print('Copyright 2024 Kathryn Hedley, Khyrenz Ltd')
-	print()
 
 # Function to convert Key Last Write timestamp to readable format
 # Usage - convertWin64time(kusbstorkey.header.last_modified)
