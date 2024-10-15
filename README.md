@@ -28,6 +28,8 @@ Parses the following Event Logs:
 
 **Bypasses Windows permission errors on a mounted volume using chmod**  
   This only works if you're running the Terminal window as Administrator
+  
+**CSV option will output two files: USB information (usb-info.csv) and a timeline of connections and disconnection events (usb-timeline.csv)**
 
 **Dependencies:**  
   pip3 install regipy python-evtx
@@ -48,7 +50,7 @@ Parses the following Event Logs:
 	-u    <NTUSER.dat hive> 	- Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made   
  	-v    <drive letter>		- Parse this mounted volume. Use either this "-v" option or the individual hive options. Using this option means the Windows Partition Diagnostic Event Log will also be parsed. If this option is provided, "-s|-u|-w" options will be ignored. *IMPORTANT*: Please make sure you are running this script in a terminal window that is running as Administrator to auto-bypass Windows permission issues 
  	-w    <SOFTWARE hive>	 	- Parse this SOFTWARE hive. This argument is optional. If omitted, some drive letters and volumes names may be missing in the output  
-	-o    <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs  
+	-o    <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs. Note: outputs two CSV files - usb-info.csv & usb-timeline.csv in same folder as the script
 
 **Example Usage:**  
     python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT  

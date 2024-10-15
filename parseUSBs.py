@@ -24,6 +24,9 @@
 # Bypasses Windows permission errors on a mounted volume using chmod
 ## This only works if you're running the Terminal window as Administrator
 
+# CSV option produces two CSV output files - one showing USB info (usb-info.csv) and a timeline of connection and disconnection times (usb-timeline.csv)
+## These output files are written to the same folder the script was run from
+
 # Dependencies:
 ## pip3 install regipy python-evtx
 
@@ -42,6 +45,16 @@ from regipy.recovery import apply_transaction_logs
 from regipy.utils import calculate_xor32_checksum
 from binascii import hexlify
 
+#Defining object for a connection
+class DeviceConnection:
+	# initialising new object to empty values
+	def __init__(self):
+		self.time = ""
+		self.connectionType = ""
+		self.volumeLabel = ""
+		self.volumeSerial = ""
+		self.driveLetter = ""
+
 #Defining object for a USB device
 class ExternalDevice:
 	# initialising new object to empty values
@@ -51,26 +64,18 @@ class ExternalDevice:
 		self.firstConnected = ""
 		self.lastConnected = ""
 		self.lastRemoved = ""
-		self.otherConnection = []
-		self.otherDisconnection = []
+		self.connections = []
 		self.lastDriveLetter = ""
 		self.volumeName = ""
 		self.diskId = ""
 		self.userAccounts = []
-		self.volumeSerials = []
 
-	# method to set other connection time
-	def addOtherConnection(self, khyoc):
-		self.otherConnection.append(khyoc)
+	# method to set connection/disconnection time
+	def addConnection(self, khyc):
+		self.connections.append(khyc)
 	# method to get other connection timestamps
-	def getOtherConnections(self):
-		return self.otherConnection
-	# method to set other disconnection time
-	def addOtherDisconnection(self, khyoc):
-		self.otherDisconnection.append(khyoc)
-	# method to get other disconnection timestamps
-	def getOtherDisconnections(self):
-		return self.otherDisconnection
+	def getConnections(self):
+		return self.connections
 	# method to set last drive letter
 	def setLastDriveLetter(self, khydl):
 		self.lastDriveLetter = khydl
@@ -89,12 +94,6 @@ class ExternalDevice:
 	# method to get user accounts
 	def getUsers(self):
 		return self.userAccounts
-	# method to add volume serial number
-	def addVsn(self, khyvsn):
-		self.volumeSerials.append(khyvsn)
-	# method to get volume serial numbers
-	def getVsns(self):
-		return self.volumeSerials
 
 		
 # Function to display help info
@@ -114,6 +113,7 @@ def printHelp():
 	print('	-w <SOFTWARE hive>	Parse this SOFTWARE HIVE. This argument is optional.')
 	print('				If omitted, some drive letters and volume names may be missing in the output')
 	print('	-o <csv|keyval>		Output to either CSV or key-value pair format. Default is key-value pairs')
+	print('				Note: outputs two CSV files - usb-info.csv & usb-timeline.csv in same folder as the script')
 	print()
 	print('Example commands:')
 	print('python3 parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE')
@@ -137,9 +137,11 @@ def getTime(reg, regkey):
 	return khyconn
 
 # Function to output parsed data as CSV
-def outputCSV(dev):
-	print('Value:,DeviceFriendlyName,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,OtherDisconnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts')
-	print('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache/Microsoft-Windows-Partition%4Diagnostic.evtx,Microsoft-Windows-Partition%4Diagnostic.evtx,SYSTEM-MountedDevices/SOFTWARE-Windows Portable Devices,SOFTWARE-VolumeInfoCache/SOFTWARE-Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2')
+def outputCSV(dev, outfile):
+	of = open(outfile, "w")
+	
+	of.write('Value:,DeviceFriendlyName,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,OtherDisconnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts\n')
+	of.write('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache/Microsoft-Windows-Partition%4Diagnostic.evtx,Microsoft-Windows-Partition%4Diagnostic.evtx,SYSTEM-MountedDevices/SOFTWARE-Windows Portable Devices,SOFTWARE-VolumeInfoCache/SOFTWARE-Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2\n')
 	
 	for khyd in dev:
 		uacc=""
@@ -149,24 +151,27 @@ def outputCSV(dev):
 			else:
 				uacc += "|"+khyu
 		oconn=""
-		for khyocn in khyd.otherConnection:
-			if oconn == "":
-				oconn = khyocn
-			else:
-				oconn += "|"+khyocn
+		for khyocn in khyd.connections:
+			if khyocn.connectionType == "Connect":
+				if oconn == "":
+					oconn = khyocn.time
+				else:
+					oconn += "|"+khyocn.time
 		dconn=""
-		for khydcn in khyd.otherDisconnection:
-			if dconn == "":
-				dconn = khydcn
-			else:
-				dconn += "|"+khydcn
+		for khydcn in khyd.connections:
+			if khydcn.connectionType == "Disconnect":
+				if dconn == "":
+					dconn = khydcn.time
+				else:
+					dconn += "|"+khydcn.time
 		vsns=""
-		for khyvs in khyd.volumeSerials:
+		for khyvs in khyd.connections:
 			if vsns == "":
-				vsns = khyvs
+				vsns = khyvs.volumeSerial
 			else:
-				vsns += "|"+khyvs
-		print(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc)
+				vsns += "|"+khyvs.volumeSerial
+		of.write(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc+"\n") 
+	of.close()
 
 # Function to output parsed data as Key/Value pairs
 def outputKV(dev):
@@ -176,18 +181,39 @@ def outputKV(dev):
 		print("First Connected:", khyd.firstConnected)
 		print("Last Connected:", khyd.lastConnected)
 		print("Last Removed:", khyd.lastRemoved)
-		for khyocn in khyd.otherConnection:
-			print("Other Connection:", khyocn)
-		for khydcn in khyd.otherDisconnection:
-			print("Other Disconnection:", khydcn)
+		for khycn in khyd.connections:
+			if khycn.connectionType == "Connect":
+				print("Other Connection:", khycn.time)
+		for khycn in khyd.connections:
+			if khycn.connectionType == "Disconnect":
+				print("Other Disconnection:", khycn.time)
 		print("Last Drive Letter:", khyd.lastDriveLetter)
 		print("Volume Name:", khyd.volumeName)
-		for khyvs in khyd.volumeSerials:
-			print("VSN:", khyvs)
+		for khycn in khyd.connections:
+			if khycn.volumeSerial != "":
+				print("VSN:", khycn.volumeSerial)
 		for khyu in khyd.userAccounts:
 			print("User Account:", khyu)
 		print()
 
+# Function to output timeline of connections & disconnections as CSV
+def outputTimeline(kdevs, outf):
+	of = open(outf, "w")
+	
+	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DriveLetter,VolumeName,VolumeSerial\n')
+	
+	for kdv in kdevs:
+		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+",,,\n")
+		
+		for kdc in kdv.connections:
+			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+"\n")
+			
+		if kdv.lastConnected != "":
+			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",\n")
+		if kdv.lastRemoved != "":
+			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",\n")
+	of.close()
+	
 # Function to check if iSerialNumber in array of ExternalDevice objects
 def snInDevArray(ksn, kdevarr):
 	for khyd in kdevarr:
@@ -364,6 +390,10 @@ for karg in sys.argv:
 		next='output'
 	if karg == "-v":
 		next='volume'
+
+#Output files if CSV option is selected - outputs to two files: usb-info & timeline
+csvoutfile = "usb-info.csv"
+timelinefile = "usb-timeline.csv"
 
 #if volume option is provided, find Registry hives
 if kmtvol:
@@ -568,11 +598,17 @@ for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfo
 			
 			#Only adding other connection time to list if not already present
 			exists=False
-			for c in d.getOtherConnections():
-				if c == klwtime:
-					exists=True
+			for c in d.getConnections():
+				if c.time == klwtime:
+					exists = True
 			if not exists:
-				d.addOtherConnection(klwtime)
+				dc = DeviceConnection()
+				dc.time = klwtime
+				dc.connectionType = "Connect"
+				dc.volumeLabel = kvname
+				if kdletter != "":
+					dc.driveLetter = kdletter
+				d.addConnection(dc)
 				break
 
 #if volume option is provided, find & parse event log for connection & disconnection events (both EID 1006)
@@ -641,27 +677,27 @@ if kmtvol:
 							exists=False
 							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
 							if connect:
-								for c in d.getOtherConnections():
-									if c == isoETime:
+								for c in d.getConnections():
+									if c.time == isoETime and c.connectionType == "Connect":
 										exists=True
 										break
 								if not exists:
-									d.addOtherConnection(isoETime)
+									dc = DeviceConnection()
+									dc.time = isoETime
+									dc.connectionType = "Connect"
+									dc.volumeSerial = vsn
+									d.addConnection(dc)
 							if disconnect:
-								for c in d.getOtherDisconnections():
-									if c == isoETime:
+								for c in d.getConnections():
+									if c.time == isoETime and c.connectionType == "Disconnect":
 										exists=True
 										break
 								if not exists:
-									d.addOtherDisconnection(isoETime)
-							
-							exists=False
-							for c in d.getVsns():
-								if c == vsn:
-									exists=True
-									break
-							if (not exists) and not (vsn == "None") and not (vsn == ""):
-								d.addVsn(vsn)
+									dc = DeviceConnection()
+									dc.time = isoETime
+									dc.connectionType = "Disconnect"
+									dc.volumeSerial = vsn
+									d.addConnection(dc)
 								
 							#Checking for other info gaps from the Registry
 							if d.name == "":
@@ -670,6 +706,7 @@ if kmtvol:
 #Print output in CSV or key-value pair format
 print()
 if csvout:
-	outputCSV(devices)
+	outputCSV(devices, csvoutfile)
+	outputTimeline(devices, timelinefile)
 if kvout:
 	outputKV(devices)
