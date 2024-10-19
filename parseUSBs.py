@@ -20,6 +20,7 @@
 
 #Parses the following Event Logs:
 ## Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
+## Event IDs 1001 & 1002 in Microsoft-Windows-Storsvc%4Diagnostic.evtx
 
 # Bypasses Windows permission errors on a mounted volume using chmod
 ## This only works if you're running the Terminal window as Administrator
@@ -53,7 +54,9 @@ class DeviceConnection:
 		self.connectionType = ""
 		self.volumeLabel = ""
 		self.volumeSerial = ""
+		self.volumeCount = ""
 		self.driveLetter = ""
+		self.deviceSize = ""
 
 #Defining object for a USB device
 class ExternalDevice:
@@ -106,7 +109,7 @@ def printHelp():
 	print('				If omitted, connections to user accounts won\'t be made')
 	print('	-v <drive letter>	Parse this mounted volume')
 	print('				Use either this "-v" option or the individual hive options.')
-	print('				Using this option means the Windows Partition Diagnostic Event Log will also be parsed.')
+	print('				Using this option means USB-related Windows Event Logs will also be parsed.')
 	print('				If this option is provided, "-s|-u|-w" options will be ignored')
 	print('				*IMPORTANT*: Please make sure you are running this script in a terminal window that is running')
 	print('				as Administrator to auto-bypass Windows permission issues')
@@ -200,18 +203,18 @@ def outputKV(dev):
 def outputTimeline(kdevs, outf):
 	of = open(outf, "w")
 	
-	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DriveLetter,VolumeName,VolumeSerial\n')
+	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DriveLetter,VolumeName,VolumeSerial,VolumeCount,DeviceSize\n')
 	
 	for kdv in kdevs:
-		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+",,,\n")
+		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+",,,,,\n")
 		
 		for kdc in kdv.connections:
-			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+"\n")
+			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
 			
 		if kdv.lastConnected != "":
-			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",\n")
+			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
 		if kdv.lastRemoved != "":
-			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",\n")
+			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
 	of.close()
 	
 # Function to check if iSerialNumber in array of ExternalDevice objects
@@ -344,6 +347,15 @@ def stripUaspMarker(ksn):
 	else:
 		return ksn
 	
+# Check if two (str) dates are within 'secdiff' seconds of each other (either way)
+def timesInRange(ktm1, ktm2, secdiff):
+	#Checking if date & hh:mm match for both dates
+	if ktm1[0 : 16] != ktm2[0 : 16]:
+		return False
+	ktm1Secs=float(ktm1[17 : 26])
+	ktm2Secs=float(ktm2[17 : 26])
+	if ktm1Secs <= (ktm2Secs + secdiff) and ktm1Secs >= (ktm2Secs - secdiff):
+		return True
 
 ### MAIN function ###
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
@@ -416,9 +428,11 @@ if kmtvol:
 			#Store paths to NTUSER hives
 			userHives.append(usrdir+"/NTUSER.DAT")
 
-#Event log to parse to get USB connections
-usbEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Partition%4Diagnostic.evtx"
-usbEvtId='1006'
+#Event logs to parse to get USB connections
+partDiagEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Partition%4Diagnostic.evtx"
+partDiagEvtId='1006'
+storsvcEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Storsvc%4Diagnostic.evtx"
+storsvcEvtIds=['1001','1002']
 
 # Checking hives exist & opening to extract keys & values
 if os.path.isfile(sysHive):
@@ -611,10 +625,10 @@ for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfo
 				d.addConnection(dc)
 				break
 
-#if volume option is provided, find & parse event log for connection & disconnection events (both EID 1006)
+#if volume option is provided, find & parse event logs for connection & disconnection events
 if kmtvol:
-	print("Opening: ", usbEvtx)
-	with evtx.Evtx(usbEvtx) as evtxlog:
+	print("Opening: ", partDiagEvtx)
+	with evtx.Evtx(partDiagEvtx) as evtxlog:
 		for evtxrecord in evtxlog.records():
 			#print(evtxrecord.xml())
 			root = minidom.parseString(evtxrecord.xml())
@@ -627,12 +641,13 @@ if kmtvol:
 			vsn=""
 			connect=False
 			disconnect=False
+			exists=False
 
 			#Getting Event ID & time	
 			sysinfo = root.getElementsByTagName('System')[0]
 			eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
 			
-			if eId == usbEvtId:
+			if eId == partDiagEvtId:
 				eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
 				
 				elements = root.getElementsByTagName('Data')
@@ -678,9 +693,13 @@ if kmtvol:
 							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
 							if connect:
 								for c in d.getConnections():
-									if c.time == isoETime and c.connectionType == "Connect":
+									#Checking if event within 1 sec has already been found & recorded
+									if (timesInRange(isoETime, c.time, 1)) and c.connectionType == "Connect":
 										exists=True
+										if dc.volumeSerial == "":
+											dc.volumeSerial = vsn
 										break
+
 								if not exists:
 									dc = DeviceConnection()
 									dc.time = isoETime
@@ -689,7 +708,10 @@ if kmtvol:
 									d.addConnection(dc)
 							if disconnect:
 								for c in d.getConnections():
-									if c.time == isoETime and c.connectionType == "Disconnect":
+									#Checking if event within 2 secs has already been found & recorded
+									if (timesInRange(isoETime, c.time, 2)) and c.connectionType == "Disconnect":
+										if c.volumeSerial == "":
+											c.volumeSerial = vsn
 										exists=True
 										break
 								if not exists:
@@ -698,6 +720,91 @@ if kmtvol:
 									dc.connectionType = "Disconnect"
 									dc.volumeSerial = vsn
 									d.addConnection(dc)
+								
+							#Checking for other info gaps from the Registry
+							if d.name == "":
+								d.name = make + " " + model
+
+	print("Opening: ", storsvcEvtx)
+	with evtx.Evtx(storsvcEvtx) as storevtxlog:
+		for evtxrecord in storevtxlog.records():
+			#print(evtxrecord.xml())
+			root = minidom.parseString(evtxrecord.xml())
+			eId=""
+			eTime=""
+			parent=""
+			sn=""
+			make=""
+			model=""
+			volCount=""
+			devSize=""
+			exists=False
+
+			#Getting Event ID & time	
+			sysinfo = root.getElementsByTagName('System')[0]
+			eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
+			
+			if eId == storsvcEvtIds[0] or eId == storsvcEvtIds[1]:
+				eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
+				
+				elements = root.getElementsByTagName('Data')
+				for element in elements:
+					if element.attributes['Name'].value == "ParentId":
+						try:
+							parent = element.firstChild.nodeValue
+							#get Serial number in ParentId - everything after last '\'
+							parent_sn = stripUaspMarker(element.firstChild.nodeValue[element.firstChild.nodeValue.rindex('\\')+1:])
+						except:
+							pass
+					if element.attributes['Name'].value == "SerialNumber":
+						try:
+							sn = stripUaspMarker(element.firstChild.nodeValue)
+						except:
+							pass
+					if element.attributes['Name'].value == "VendorId":
+						try:
+							make = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "ProductId":
+						try:
+							model = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "VolumeCount":
+						try:
+							volCount = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "Size":
+						try:
+							devSize = element.firstChild.nodeValue
+						except:
+							pass
+				if parent.startswith("USB\\"):
+					#Matching this event info with other connection info for this device
+					for d in devices:
+						if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
+							#Adding info to device record - if not already present
+							exists=False
+							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
+
+							for c in d.getConnections():
+								#Checking if event within 2 secs has already been found & recorded									
+								if timesInRange(isoETime, c.time, 2):
+									exists=True
+									#Checking if some fields are empty & can be populated
+									if c.volumeCount == "":
+										c.volumeCount = volCount
+									if c.deviceSize == "":
+										c.deviceSize = devSize
+							
+							if not exists:
+								dc = DeviceConnection()
+								dc.time = isoETime
+								dc.volumeCount = volCount
+								dc.deviceSize = devSize
+								d.addConnection(dc)
 								
 							#Checking for other info gaps from the Registry
 							if d.name == "":
