@@ -23,14 +23,14 @@ Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-e
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop  
   NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2  
 
-Parses the following Event Logs:
+**Parses the following Event Logs:**  
   Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
   Event IDs 1001 & 1002 in Microsoft-Windows-Storsvc%4Diagnostic.evtx
 
 **Bypasses Windows permission errors on a mounted volume using chmod**  
   This only works if you're running the Terminal window as Administrator
   
-**CSV option will output two files: USB information (usb-info.csv) and a timeline of connections and disconnection events (usb-timeline.csv)**
+**CSV option will output two files: USB information (usb-info.csv) and a timeline of connections and disconnection events (usb-timeline.csv)**  
   Events within 2 seconds of each other are merged
 
 **Dependencies:**  
