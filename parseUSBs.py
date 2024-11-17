@@ -264,7 +264,7 @@ def replay_logs(khvpath):
 # Function to change permissions on a folder to allow Registry hives to be accessed
 def pychmod(kpath):
 	try:
-		if os.path.exists(kpath):
+		if (not inLinux(kpath)) and os.path.exists(kpath):
 			os.chmod(kpath, 0o777)
 			print("Permissions modified successfully on path: "+kpath)
 		else:
@@ -276,10 +276,13 @@ def pychmod(kpath):
 		sys.exit()
 
 # Function to check python is running in an admin terminal
-def isAdmin():
+def isAdmin(volp):
 	try:
-		if 'wsl' in platform.platform().lower():
-			# Cannot determine if running as admin, so default to True
+		if volp.startswith("/"):
+			# Cannot determine if running as admin but in Linux, so default to True
+			return True
+		elif 'wsl' in platform.platform().lower():
+			# Cannot determine if running as admin but in WSL, so default to True
 			return True
 		elif platform.platform().lower().startswith('linux'):
 			return os.getuid() == 0
@@ -289,6 +292,28 @@ def isAdmin():
 	finally:
 		return False
 
+# Function to check python is running in Linux-based terminal
+def inLinux(volp):
+	try:
+		if 'wsl' in platform.platform().lower():
+			return False
+		elif 'linux' in platform.platform().lower():
+			return True
+		elif volp.startswith("/"):
+			return True
+		elif platform.platform().lower().startswith('linux'):
+			return True
+		elif platform.platform().lower().startswith('windows'):
+			return False
+		elif ":" in volp:
+			return False
+	except Exception:
+		#empty value
+		pass		
+	
+	# Default to False
+	return False
+		
 # Function to get filesystem type from hex VBR
 def getFSFromVbr(khexvbr):
 	fstype=hexToText(khexvbr[6:21])
