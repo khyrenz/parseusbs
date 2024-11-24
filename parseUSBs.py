@@ -12,6 +12,7 @@
 ## SYSTEM\kcurrentcontrolset\Enum\USB
 ## SYSTEM\kcurrentcontrolset\Enum\USBSTOR
 ## SYSTEM\kcurrentcontrolset\Enum\SCSI
+## SYSTEM\kcurrentcontrolset\Enum\SWD\WPDBUSENUM
 ## SYSTEM\MountedDevices
 ## SOFTWARE\Microsoft\Windows Portable Devices\Devices
 ## SOFTWARE\Microsoft\Windows Search\VolumeInfoCache
@@ -382,6 +383,16 @@ def timesInRange(ktm1, ktm2, secdiff):
 	if ktm1Secs <= (ktm2Secs + secdiff) and ktm1Secs >= (ktm2Secs - secdiff):
 		return True
 
+# Remove all characters after the last '&' character in a string, including the '&' itself
+def removeAmpEnd(kystr1):
+	amp = kystr1.find('&', 2)
+	remove = len(kystr1)-amp
+	
+	if amp > 0:
+		return kystr1[:-remove]
+	else:
+		return kystr1
+
 ### MAIN function ###
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
@@ -508,13 +519,7 @@ for kusbstorkey in SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\U
 		newDev.name = kusbstorsnkey.get_value('FriendlyName')
 		
 		#Get device serial number, removing all after the last '&' character, including the '&' itself
-		amp = kusbstorsnkey.name.find('&', 2)
-		remove = len(kusbstorsnkey.name)-amp
-		
-		if amp > 0:
-			newDev.iSerialNumber = kusbstorsnkey.name[:-remove]
-		else:
-			newDev.iSerialNumber = kusbstorsnkey.name
+		newDev.iSerialNumber = removeAmpEnd(kusbstorsnkey.name)
 		
 		#Get device timestamps (if present)
 		newDev.firstConnected = getTime(SYSTEM, "SYSTEM\\" + khycurrentcontrolset + "\\Enum\\USBSTOR\\" + kusbstorkey.name + "\\" + kusbstorsnkey.name + "\\Properties\\{83da6326-97a6-4088-9453-a1923f573b29}\\0064")
@@ -620,6 +625,38 @@ for kwpdkey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Portable Devices\\
 					kdev.setLastDriveLetter(volName)
 			else: #Volume name
 				kdev.setVolumeName(volName)
+
+# Iterating over SYSTEM\CurrentControlSet\Enum\SWD\WPDBUSENUM to determine volume name or last drive letter...
+for kkwpdkey in SYSTEM.get_key("SYSTEM\\" + khycurrentcontrolset + "\\Enum\\SWD\\WPDBUSENUM").iter_subkeys():
+	#Checking if key name contains iSerialNumber (>1 hash symbol) or DiskID (1 hash symbol)
+	ksnum = ""
+	kdid = ""
+	if kkwpdkey.name.count('#') > 1:
+		ksnum = removeAmpEnd(kkwpdkey.name.split('#')[2])
+	else:
+		kdid = kkwpdkey.name.split('#')[0]
+	
+	for kdev in devices:
+		if ksnum != "" and kdev.iSerialNumber.lower() in ksnum.lower(): 
+			#Match to USB device in array - get data in FriendlyName value
+			volName = kkwpdkey.get_value('FriendlyName')
+			if ":\\" in volName:
+				#Drive letter, not volume name - add to devices info if not already added
+				if kdev.lastDriveLetter == "":
+					kdev.setLastDriveLetter(volName)
+			else: #Volume name
+				if kdev.volumeName == "":
+					kdev.setVolumeName(volName)
+		elif kdid != "" and kdev.getDiskId().lower() and kdev.getDiskId().lower() in kdid.lower():
+			#Match to USB device on Disk ID (SCSI)
+			volName = kkwpdkey.get_value('FriendlyName')
+			if ":\\" in volName:
+				#Drive letter, not volume name - add to devices info if not already added
+				if kdev.lastDriveLetter == "":
+					kdev.setLastDriveLetter(volName)
+			else: #Volume name
+				if kdev.volumeName == "":
+					kdev.setVolumeName(volName)
 
 # Iterating over SOFTWARE\Microsoft\Windows Search\VolumeInfoCache to try & match up drive letter with known volume name...
 for kvickey in SOFTWARE.get_key("SOFTWARE\\Microsoft\\Windows Search\\VolumeInfoCache").iter_subkeys():
