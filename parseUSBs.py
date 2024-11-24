@@ -73,6 +73,7 @@ class ExternalDevice:
 		self.volumeName = ""
 		self.diskId = ""
 		self.userAccounts = []
+		self.altSerials = []
 
 	# method to set connection/disconnection time
 	def addConnection(self, khyc):
@@ -98,6 +99,9 @@ class ExternalDevice:
 	# method to get user accounts
 	def getUsers(self):
 		return self.userAccounts
+	# method to add serial number
+	def addAltSerial(self, kser):
+		self.altSerials.append(kser)
 
 		
 # Function to display help info
@@ -144,8 +148,8 @@ def getTime(reg, regkey):
 def outputCSV(dev, outfile):
 	of = open(outfile, "w")
 	
-	of.write('Value:,DeviceFriendlyName,iSerialNumber,FirstConnected,LastConnected,LastRemoved,OtherConnections,OtherDisconnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts\n')
-	of.write('Source:,USBSTOR-FriendlyName,USBSTOR,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache/Microsoft-Windows-Partition%4Diagnostic.evtx,Microsoft-Windows-Partition%4Diagnostic.evtx,SYSTEM-MountedDevices/SOFTWARE-Windows Portable Devices,SOFTWARE-VolumeInfoCache/SOFTWARE-Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2\n')
+	of.write('Value:,DeviceFriendlyName,iSerialNumber(|otherSerialNumbers),DiskID,FirstConnected,LastConnected,LastRemoved,OtherConnections,OtherDisconnections,LastDriveLetter,VolumeName,VolumeSerials,UserAccounts\n')
+	of.write('Source:,USBSTOR-FriendlyName,USBSTOR/EventLogs,SCSI,USBSTOR-0064,USBSTOR-0066,USBSTOR-0067,SOFTWARE-VolumeInfoCache/Microsoft-Windows-Partition%4Diagnostic.evtx,Microsoft-Windows-Partition%4Diagnostic.evtx,SYSTEM-MountedDevices/SOFTWARE-Windows Portable Devices,SOFTWARE-VolumeInfoCache/SOFTWARE-Windows Portable Devices,Microsoft-Windows-Partition%4Diagnostic.evtx,NTUSER-MountPoints2\n')
 	
 	for khyd in dev:
 		uacc=""
@@ -174,7 +178,12 @@ def outputCSV(dev, outfile):
 				vsns = khyvs.volumeSerial
 			else:
 				vsns += "|"+khyvs.volumeSerial
-		of.write(','+khyd.name+','+khyd.iSerialNumber+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc+"\n") 
+		dsns=khyd.iSerialNumber
+		for khyds in khyd.altSerials:
+			if khyds != "":
+				dsns += "|"+khyds
+				
+		of.write(','+khyd.name+','+dsns+','+khyd.diskId+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc+"\n") 
 	of.close()
 
 # Function to output parsed data as Key/Value pairs
@@ -182,6 +191,9 @@ def outputKV(dev):
 	for khyd in dev:
 		print("Device Friendly Name:", khyd.name)
 		print("iSerialNumber:", khyd.iSerialNumber)
+		for khysns in khyd.altSerials:
+			print("Other Serial Number:", khysns)
+		print("DiskID (SCSI):", khyd.diskId)
 		print("First Connected:", khyd.firstConnected)
 		print("Last Connected:", khyd.lastConnected)
 		print("Last Removed:", khyd.lastRemoved)
@@ -204,18 +216,18 @@ def outputKV(dev):
 def outputTimeline(kdevs, outf):
 	of = open(outf, "w")
 	
-	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DriveLetter,VolumeName,VolumeSerial,VolumeCount,DeviceSize\n')
+	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DiskID,DriveLetter,VolumeName,VolumeSerial,VolumeCount,DeviceSize\n')
 	
 	for kdv in kdevs:
-		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+",,,,,\n")
+		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+",,,,,\n")
 		
 		for kdc in kdv.connections:
-			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
 			
 		if kdv.lastConnected != "":
-			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
+			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
 		if kdv.lastRemoved != "":
-			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
+			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
 	of.close()
 	
 # Function to check if iSerialNumber in array of ExternalDevice objects
@@ -782,6 +794,13 @@ if kmtvol:
 									dc.connectionType = "Disconnect"
 									dc.volumeSerial = vsn
 									d.addConnection(dc)
+								
+							#Adding extra s/n if the two don't match (and if not already noted)
+							if sn != parent_sn:
+								if parent_sn == d.iSerialNumber and not sn in d.altSerials:
+									d.addAltSerial(sn)
+								elif sn == d.iSerialNumber and not parent_sn in d.altSerials:
+									d.addAltSerial(parent_sn)
 								
 							#Checking for other info gaps from the Registry
 							if d.name == "":
