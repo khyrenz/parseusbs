@@ -17,7 +17,7 @@ Runs in Python3 using the following libraries:
 >  SYSTEM\CurrentControlSet\Enum\USB  
 >  SYSTEM\CurrentControlSet\Enum\USBSTOR  
 >  SYSTEM\CurrentControlSet\Enum\SCSI  
->  SYSTEM\CurrentControlSet\Enum\SWD\WPDBUSENUM
+>  SYSTEM\CurrentControlSet\Enum\SWD\WPDBUSENUM  
 >  SYSTEM\MountedDevices  
 >  SOFTWARE\Microsoft\Windows Portable Devices\Devices  
 >  SOFTWARE\Microsoft\Windows Search\VolumeInfoCache  
