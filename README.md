@@ -2,7 +2,7 @@
 Parses USB connection artifacts from a mounted Windows volume or offline Registry hives
 
 
-Registry parser, to extract USB connection artefacts from SYSTEM, SOFTWARE, and NTUSER.dat hives as well as custom event logs if running against a mounted Windows volume  
+Registry parser, to extract USB connection artefacts from SYSTEM, SOFTWARE, and NTUSER.dat hives as well as custom event logs if running against a mounted Windows volume or mounted KAPE triage image of a Windows system 
 
 Author: Kathryn Hedley, khedley@khyrenz.com  
 Copyright 2024 Kathryn Hedley, Khyrenz Ltd  
@@ -17,7 +17,7 @@ Runs in Python3 using the following libraries:
 >  SYSTEM\CurrentControlSet\Enum\USB  
 >  SYSTEM\CurrentControlSet\Enum\USBSTOR  
 >  SYSTEM\CurrentControlSet\Enum\SCSI  
->  SYSTEM\Currentcontrolset\Enum\SWD\WPDBUSENUM
+>  SYSTEM\CurrentControlSet\Enum\SWD\WPDBUSENUM
 >  SYSTEM\MountedDevices  
 >  SOFTWARE\Microsoft\Windows Portable Devices\Devices  
 >  SOFTWARE\Microsoft\Windows Search\VolumeInfoCache  

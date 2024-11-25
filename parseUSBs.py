@@ -55,6 +55,8 @@ class DeviceConnection:
 		self.connectionType = ""
 		self.volumeLabel = ""
 		self.volumeSerial = ""
+		self.filesystem = ""
+		self.partStyle = ""
 		self.volumeCount = ""
 		self.driveLetter = ""
 		self.deviceSize = ""
@@ -175,7 +177,7 @@ def outputCSV(dev, outfile):
 		vsns=""
 		for khyvs in khyd.connections:
 			if vsns == "":
-				vsns = khyvs.volumeSerial
+				vsns = khyvs.volumeSerial + " (" + khyvs.partStyle + ", " + khyvs.filesystem + ")"
 			else:
 				vsns += "|"+khyvs.volumeSerial
 		dsns=khyd.iSerialNumber
@@ -183,17 +185,17 @@ def outputCSV(dev, outfile):
 			if khyds != "":
 				dsns += "|"+khyds
 				
-		of.write(','+khyd.name+','+dsns+','+khyd.diskId+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+khyd.lastDriveLetter+','+khyd.volumeName+','+vsns+','+uacc+"\n") 
+		of.write(','+str(khyd.name)+','+dsns+','+str(khyd.diskId)+','+khyd.firstConnected+','+khyd.lastConnected+','+khyd.lastRemoved+','+oconn+','+dconn+','+str(khyd.lastDriveLetter)+','+str(khyd.volumeName)+','+vsns+','+uacc+"\n") 
 	of.close()
 
 # Function to output parsed data as Key/Value pairs
 def outputKV(dev):
 	for khyd in dev:
-		print("Device Friendly Name:", khyd.name)
-		print("iSerialNumber:", khyd.iSerialNumber)
+		print("Device Friendly Name:", str(khyd.name))
+		print("iSerialNumber:", str(khyd.iSerialNumber))
 		for khysns in khyd.altSerials:
 			print("Other Serial Number:", khysns)
-		print("DiskID (SCSI):", khyd.diskId)
+		print("DiskID (SCSI):", str(khyd.diskId))
 		print("First Connected:", khyd.firstConnected)
 		print("Last Connected:", khyd.lastConnected)
 		print("Last Removed:", khyd.lastRemoved)
@@ -203,11 +205,11 @@ def outputKV(dev):
 		for khycn in khyd.connections:
 			if khycn.connectionType == "Disconnect":
 				print("Other Disconnection:", khycn.time)
-		print("Last Drive Letter:", khyd.lastDriveLetter)
-		print("Volume Name:", khyd.volumeName)
+		print("Last Drive Letter:", str(khyd.lastDriveLetter))
+		print("Volume Name:", str(khyd.volumeName))
 		for khycn in khyd.connections:
 			if khycn.volumeSerial != "":
-				print("VSN:", khycn.volumeSerial)
+				print("VSN:", str(khycn.volumeSerial) + " (" + str(khycn.partStyle) + ", " + str(khycn.filesystem) + ")")
 		for khyu in khyd.userAccounts:
 			print("User Account:", khyu)
 		print()
@@ -216,18 +218,19 @@ def outputKV(dev):
 def outputTimeline(kdevs, outf):
 	of = open(outf, "w")
 	
-	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DiskID,DriveLetter,VolumeName,VolumeSerial,VolumeCount,DeviceSize\n')
+	#Writing out column headers
+	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DiskID,DriveLetter,VolumeName,VolumeSerial,PartitionStyle,Filesystem,VolumeCount,DeviceSize\n')
 	
-	for kdv in kdevs:
-		of.write(kdv.firstConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+",,,,,\n")
-		
+	for kdv in kdevs:	
 		for kdc in kdv.connections:
-			of.writelines(kdc.time+","+kdc.connectionType+","+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdc.driveLetter+","+kdc.volumeLabel+","+kdc.volumeSerial+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
-			
-		if kdv.lastConnected != "":
-			of.write(kdv.lastConnected+",Connect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
-		if kdv.lastRemoved != "":
-			of.write(kdv.lastRemoved+",Disconnect,"+kdv.name+","+kdv.iSerialNumber+","+kdv.diskId+","+kdv.lastDriveLetter+","+kdv.volumeName+",,,\n")
+			if timesInRange(kdc.time, kdv.firstConnected, 1) and str(kdc.connectionType) == "Connect":
+				of.write(kdv.firstConnected+",First Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+			elif kdv.lastConnected != "" and timesInRange(kdc.time, kdv.lastConnected, 1) and str(kdc.connectionType) == "Connect":
+				of.write(kdv.lastConnected+",Last Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+			elif kdv.lastRemoved != "" and timesInRange(kdc.time, kdv.lastRemoved, 1) and str(kdc.connectionType) == "Disconnect":
+				of.write(kdv.lastRemoved+",Last Disconnect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+			else:
+				of.writelines(kdc.time+","+str(kdc.connectionType)+","+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
 	of.close()
 	
 # Function to check if iSerialNumber in array of ExternalDevice objects
@@ -331,7 +334,7 @@ def inLinux(volp):
 def getFSFromVbr(khexvbr):
 	fstype=hexToText(khexvbr[6:21])
 	if fstype.startswith("EXFAT"):
-		return "ExFAT"
+		return "exFAT"
 	elif fstype.startswith("NTFS"):
 		return "NTFS"
 
@@ -347,7 +350,7 @@ def getVsnFromVbr(khexvbr):
 	vbrvsnoffset=0
 	vbrvsnsize=4
 	#Getting VSN offset & size (where not 4)
-	if kfstype.startswith("ExFAT"):
+	if kfstype.startswith("exFAT"):
 		vbrvsnoffset=100
 	elif kfstype.startswith("NTFS"):
 		vbrvsnoffset=72
@@ -357,7 +360,7 @@ def getVsnFromVbr(khexvbr):
 	
 	if vbrvsnoffset > 0:
 		khyvsn=khexvbr[(vbrvsnoffset*2):((vbrvsnoffset+vbrvsnsize)*2)]
-		return(flipEndianness(khyvsn)+" (" +kfstype+")")
+		return(flipEndianness(khyvsn)) #+" (" +kfstype+")")
 	else:
 		return ""
 
@@ -387,13 +390,13 @@ def stripUaspMarker(ksn):
 	
 # Check if two (str) dates are within 'secdiff' seconds of each other (either way)
 def timesInRange(ktm1, ktm2, secdiff):
-	#Checking if date & hh:mm match for both dates
-	if ktm1[0 : 16] != ktm2[0 : 16]:
-		return False
-	ktm1Secs=float(ktm1[17 : 26])
-	ktm2Secs=float(ktm2[17 : 26])
+	ktm1Secs = datetime.fromisoformat(ktm1).timestamp()
+	ktm2Secs = datetime.fromisoformat(ktm2).timestamp()
+
 	if ktm1Secs <= (ktm2Secs + secdiff) and ktm1Secs >= (ktm2Secs - secdiff):
 		return True
+	else:
+		return False
 
 # Remove all characters after the last '&' character in a string, including the '&' itself
 def removeAmpEnd(kystr1):
@@ -460,7 +463,12 @@ if kmtvol:
 	if not kmtvol.endswith("/"):
 		kmtvol = kmtvol + "/"
 
+	#Checking if volume is full mounted image or a KAPE triage image...
+	if os.path.isdir(kmtvol+"C/Windows"):
+		kmtvol+="C/"
+	
 	sysconfdir=kmtvol+"Windows/System32/config"
+	
 	#Changing Windows permissions to allow access to each system hive
 	pychmod(sysconfdir)
 	
@@ -713,6 +721,8 @@ if kmtvol:
 			make=""
 			model=""
 			vsn=""
+			vfs=""
+			partStyle=""
 			connect=False
 			disconnect=False
 			exists=False
@@ -748,9 +758,15 @@ if kmtvol:
 							model = element.firstChild.nodeValue
 						except:
 							pass
+					if element.attributes['Name'].value == "PartitionStyle":
+						try:
+							partStyle = element.firstChild.nodeValue
+						except:
+							pass
 					if element.attributes['Name'].value == "Vbr0":
 						try:
 							hexvbr = base64.b64decode(element.firstChild.nodeValue).hex()
+							vfs=getFSFromVbr(hexvbr)
 							vsn=getVsnFromVbr(hexvbr)
 							#Only USB connection EID 1006 events log the VBR, not disconnection events
 							connect=True
@@ -759,19 +775,36 @@ if kmtvol:
 							disconnect=True
 							pass
 				if parent.startswith("USB\\"):
+					#Setting partition style to either MBR or GPT
+					if int(partStyle) == 0:
+						partStyle = "MBR"
+					elif int(partStyle) == 1:
+						partStyle = "GPT"
+					else:
+						partStyle = ""
+						
 					#Matching this event info with Registry info for this device
 					for d in devices:
 						if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
 							#Adding info to device record - if not already present
 							exists=False
 							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
+							
+							#Checking for other info gaps from the Registry
+							if str(d.name) == "None" or str(d.name) == "":
+								d.name = make + " " + model
+							
 							if connect:
 								for c in d.getConnections():
-									#Checking if event within 1 sec has already been found & recorded
-									if (timesInRange(isoETime, c.time, 1)) and c.connectionType == "Connect":
+									#Checking if event within 2 secs has already been found & recorded
+									if (timesInRange(isoETime, c.time, 2)) and c.connectionType == "Connect":
 										exists=True
 										if dc.volumeSerial == "":
 											dc.volumeSerial = vsn
+										if dc.filesystem == "":
+											dc.filesystem = vfs
+										if dc.partStyle == "":
+											dc.partStyle = partStyle
 										break
 
 								if not exists:
@@ -779,20 +812,19 @@ if kmtvol:
 									dc.time = isoETime
 									dc.connectionType = "Connect"
 									dc.volumeSerial = vsn
+									dc.filesystem = vfs
+									dc.partStyle = partStyle
 									d.addConnection(dc)
 							if disconnect:
 								for c in d.getConnections():
 									#Checking if event within 2 secs has already been found & recorded
 									if (timesInRange(isoETime, c.time, 2)) and c.connectionType == "Disconnect":
-										if c.volumeSerial == "":
-											c.volumeSerial = vsn
 										exists=True
 										break
 								if not exists:
 									dc = DeviceConnection()
 									dc.time = isoETime
 									dc.connectionType = "Disconnect"
-									dc.volumeSerial = vsn
 									d.addConnection(dc)
 								
 							#Adding extra s/n if the two don't match (and if not already noted)
@@ -801,10 +833,6 @@ if kmtvol:
 									d.addAltSerial(sn)
 								elif sn == d.iSerialNumber and not parent_sn in d.altSerials:
 									d.addAltSerial(parent_sn)
-								
-							#Checking for other info gaps from the Registry
-							if d.name == "":
-								d.name = make + " " + model
 
 	print("Opening: ", storsvcEvtx)
 	with evtx.Evtx(storsvcEvtx) as storevtxlog:
@@ -817,6 +845,8 @@ if kmtvol:
 			sn=""
 			make=""
 			model=""
+			fs=""
+			partStyle=""
 			volCount=""
 			devSize=""
 			exists=False
@@ -852,6 +882,16 @@ if kmtvol:
 							model = element.firstChild.nodeValue
 						except:
 							pass
+					if element.attributes['Name'].value == "FileSystem":
+						try:
+							fs = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "PartitionStyle":
+						try:
+							partStyle = element.firstChild.nodeValue
+						except:
+							pass
 					if element.attributes['Name'].value == "VolumeCount":
 						try:
 							volCount = element.firstChild.nodeValue
@@ -863,26 +903,44 @@ if kmtvol:
 						except:
 							pass
 				if parent.startswith("USB\\"):
+					#Setting partition style to either MBR or GPT, if filesystem field is not blank
+					if int(partStyle) == 0:
+						partStyle = "MBR"
+					elif int(partStyle) == 1:
+						partStyle = "GPT"
+					else:
+						partStyle = ""
+					
 					#Matching this event info with other connection info for this device
 					for d in devices:
 						if (sn == d.iSerialNumber) or (parent_sn == d.iSerialNumber):
 							#Adding info to device record - if not already present
 							exists=False
 							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
-
+							
 							for c in d.getConnections():
-								#Checking if event within 2 secs has already been found & recorded									
-								if timesInRange(isoETime, c.time, 2):
+								#Checking if event within  secs has already been found & recorded							
+								if timesInRange(isoETime, c.time, 45):
 									exists=True
+									if str(d.name) == "None" or str(d.name) == "":
+										d.name = make+" "+model
 									#Checking if some fields are empty & can be populated
+									if c.filesystem == "":
+										c.filesystem = fs
+									if c.partStyle == "":
+										c.partStyle = partStyle
 									if c.volumeCount == "":
 										c.volumeCount = volCount
 									if c.deviceSize == "":
 										c.deviceSize = devSize
 							
 							if not exists:
+								if str(d.name) == "None" or str(d.name) == "":
+									d.name = make+" "+model
 								dc = DeviceConnection()
 								dc.time = isoETime
+								dc.filesystem = fs
+								dc.partStyle = partStyle
 								dc.volumeCount = volCount
 								dc.deviceSize = devSize
 								d.addConnection(dc)
