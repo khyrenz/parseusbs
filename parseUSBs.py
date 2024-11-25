@@ -177,7 +177,7 @@ def outputCSV(dev, outfile):
 		vsns=""
 		for khyvs in khyd.connections:
 			if vsns == "":
-				vsns = khyvs.volumeSerial + " (" + khyvs.partStyle + ", " + khyvs.filesystem + ")"
+				vsns = khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
 			else:
 				vsns += "|"+khyvs.volumeSerial
 		dsns=khyd.iSerialNumber
