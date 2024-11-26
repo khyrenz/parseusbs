@@ -21,7 +21,7 @@
 
 #Parses the following Event Logs:
 ## Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
-## Event IDs 1001 & 1002 in Microsoft-Windows-Storsvc%4Diagnostic.evtx
+## Event IDs 1001 in Microsoft-Windows-Storsvc%4Diagnostic.evtx (EID 1002 parsing removed as no extra info)
 
 # Bypasses Windows permission errors on a mounted volume using chmod
 ## This only works if you're running the Terminal window as Administrator
@@ -176,10 +176,11 @@ def outputCSV(dev, outfile):
 					dconn += "|"+khydcn.time
 		vsns=""
 		for khyvs in khyd.connections:
-			if vsns == "":
-				vsns = khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
-			else:
-				vsns += "|"+khyvs.volumeSerial
+			if khyvs.volumeSerial != "":
+				if vsns == "":
+					vsns += khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
+				else:
+					vsns += " | " + khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
 		dsns=khyd.iSerialNumber
 		for khyds in khyd.altSerials:
 			if khyds != "":
@@ -488,7 +489,7 @@ if kmtvol:
 partDiagEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Partition%4Diagnostic.evtx"
 partDiagEvtId='1006'
 storsvcEvtx=kmtvol+"Windows/System32/winevt/Logs/Microsoft-Windows-Storsvc%4Diagnostic.evtx"
-storsvcEvtIds=['1001','1002']
+storsvcEvtId='1001'
 
 # Checking hives exist & opening to extract keys & values
 if os.path.isfile(sysHive):
@@ -833,7 +834,8 @@ if kmtvol:
 									d.addAltSerial(sn)
 								elif sn == d.iSerialNumber and not parent_sn in d.altSerials:
 									d.addAltSerial(parent_sn)
-
+	
+	#StorSvc events only found to be recorded on USB connection, not disconnection
 	print("Opening: ", storsvcEvtx)
 	with evtx.Evtx(storsvcEvtx) as storevtxlog:
 		for evtxrecord in storevtxlog.records():
@@ -855,7 +857,7 @@ if kmtvol:
 			sysinfo = root.getElementsByTagName('System')[0]
 			eId = sysinfo.getElementsByTagName('EventID')[0].firstChild.nodeValue
 			
-			if eId == storsvcEvtIds[0] or eId == storsvcEvtIds[1]:
+			if eId == storsvcEvtId:
 				eTime = sysinfo.getElementsByTagName('TimeCreated')[0].attributes['SystemTime'].value
 				
 				elements = root.getElementsByTagName('Data')
@@ -919,8 +921,8 @@ if kmtvol:
 							isoETime=datetime.strptime(eTime,'%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=timezone.utc).isoformat()
 							
 							for c in d.getConnections():
-								#Checking if event within  secs has already been found & recorded							
-								if timesInRange(isoETime, c.time, 45):
+								#Checking if event within 2 secs has already been found & recorded							
+								if timesInRange(isoETime, c.time, 2) and c.connectionType == "Connect":
 									exists=True
 									if str(d.name) == "None" or str(d.name) == "":
 										d.name = make+" "+model
@@ -933,12 +935,15 @@ if kmtvol:
 										c.volumeCount = volCount
 									if c.deviceSize == "":
 										c.deviceSize = devSize
+									if c.connectionType == "":
+										c.connectionType = "Connect"
 							
 							if not exists:
 								if str(d.name) == "None" or str(d.name) == "":
 									d.name = make+" "+model
 								dc = DeviceConnection()
 								dc.time = isoETime
+								dc.connectionType = "Connect"
 								dc.filesystem = fs
 								dc.partStyle = partStyle
 								dc.volumeCount = volCount
