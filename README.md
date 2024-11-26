@@ -26,7 +26,7 @@ Runs in Python3 using the following libraries:
 
 **Parses the following Event Logs:**  
 >  Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx  
->  Event IDs 1001 & 1002 in Microsoft-Windows-Storsvc%4Diagnostic.evtx  
+>  Event IDs 1001 in Microsoft-Windows-Storsvc%4Diagnostic.evtx  
 
 **Bypasses Windows permission errors on a mounted volume using chmod**  
 > This only works if you're running a Terminal window as Administrator on a Windows system (not required if running on native Linux Terminal)
