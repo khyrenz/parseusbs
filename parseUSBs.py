@@ -60,6 +60,7 @@ class DeviceConnection:
 		self.volumeCount = ""
 		self.driveLetter = ""
 		self.deviceSize = ""
+		self.ejected = ""
 
 #Defining object for a USB device
 class ExternalDevice:
@@ -220,18 +221,18 @@ def outputTimeline(kdevs, outf):
 	of = open(outf, "w")
 	
 	#Writing out column headers
-	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DiskID,DriveLetter,VolumeName,VolumeSerial,PartitionStyle,Filesystem,VolumeCount,DeviceSize\n')
+	of.write('Timestamp,Type,DeviceFriendlyName,iSerialNumber,DiskID,DriveLetter,VolumeName,VolumeSerial,PartitionStyle,Filesystem,VolumeCount,DeviceSize,SafelyEjected\n')
 	
 	for kdv in kdevs:	
 		for kdc in kdv.connections:
 			if timesInRange(kdc.time, kdv.firstConnected, 1) and str(kdc.connectionType) == "Connect":
-				of.write(kdv.firstConnected+",First Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+				of.write(kdv.firstConnected+",First Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+","+str(kdc.ejected)+"\n")
 			elif kdv.lastConnected != "" and timesInRange(kdc.time, kdv.lastConnected, 1) and str(kdc.connectionType) == "Connect":
-				of.write(kdv.lastConnected+",Last Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+				of.write(kdv.lastConnected+",Last Connect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+","+str(kdc.ejected)+"\n")
 			elif kdv.lastRemoved != "" and timesInRange(kdc.time, kdv.lastRemoved, 1) and str(kdc.connectionType) == "Disconnect":
-				of.write(kdv.lastRemoved+",Last Disconnect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+				of.write(kdv.lastRemoved+",Last Disconnect,"+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+","+str(kdc.ejected)+"\n")
 			else:
-				of.writelines(kdc.time+","+str(kdc.connectionType)+","+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+"\n")
+				of.writelines(kdc.time+","+str(kdc.connectionType)+","+str(kdv.name)+","+str(kdv.iSerialNumber)+","+str(kdv.diskId)+","+str(kdc.driveLetter)+","+str(kdc.volumeLabel)+","+str(kdc.volumeSerial)+","+str(kdc.partStyle)+","+str(kdc.filesystem)+","+str(kdc.volumeCount)+","+str(kdc.deviceSize)+","+str(kdc.ejected)+"\n")
 	of.close()
 	
 # Function to check if iSerialNumber in array of ExternalDevice objects
@@ -410,6 +411,7 @@ def removeAmpEnd(kystr1):
 		return kystr1
 
 ### MAIN function ###
+print("parseUSBs version 1.5.3")
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
 print("Copyright 2024 Kathryn Hedley, Khyrenz Ltd")
@@ -724,6 +726,7 @@ if kmtvol:
 			vsn=""
 			vfs=""
 			partStyle=""
+			safeEject=""
 			connect=False
 			disconnect=False
 			exists=False
@@ -762,6 +765,11 @@ if kmtvol:
 					if element.attributes['Name'].value == "PartitionStyle":
 						try:
 							partStyle = element.firstChild.nodeValue
+						except:
+							pass
+					if element.attributes['Name'].value == "UserRemovalPolicy":
+						try:
+							safeEject = element.firstChild.nodeValue
 						except:
 							pass
 					if element.attributes['Name'].value == "Vbr0":
@@ -821,11 +829,14 @@ if kmtvol:
 									#Checking if event within 2 secs has already been found & recorded
 									if (timesInRange(isoETime, c.time, 2)) and c.connectionType == "Disconnect":
 										exists=True
+										if dc.ejected == "":
+											dc.ejected = safeEject
 										break
 								if not exists:
 									dc = DeviceConnection()
 									dc.time = isoETime
 									dc.connectionType = "Disconnect"
+									dc.ejected = safeEject
 									d.addConnection(dc)
 								
 							#Adding extra s/n if the two don't match (and if not already noted)
