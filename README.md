@@ -1,5 +1,5 @@
 # parseusbs
-parseUSBs version 1.5.3  
+parseUSBs version 1.5.4  
 Parses USB connection artifacts from a mounted Windows volume or offline Registry hives  
 
 

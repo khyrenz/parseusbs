@@ -411,7 +411,7 @@ def removeAmpEnd(kystr1):
 		return kystr1
 
 ### MAIN function ###
-print("parseUSBs version 1.5.3")
+print("parseUSBs version 1.5.4")
 print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
 print("Author: Kathryn Hedley, khedley@khyrenz.com")
 print("Copyright 2024 Kathryn Hedley, Khyrenz Ltd")
@@ -466,9 +466,14 @@ if kmtvol:
 	if not kmtvol.endswith("/"):
 		kmtvol = kmtvol + "/"
 
-	#Checking if volume is full mounted image or a KAPE triage image...
-	if os.path.isdir(kmtvol+"C/Windows"):
-		kmtvol+="C/"
+	#Checking if volume is full mounted image or a KAPE triage image & getting drive letter it's mounted as...
+	dl=""
+	items=os.popen('ls -l '+kmtvol+' | awk \'{print $9}\'').read()
+	for i in items.split('\n'):
+		if len(i) == 1:
+			dl=i
+	if os.path.isdir(kmtvol+dl+"/Windows"):
+		kmtvol+=dl+"/"
 	
 	sysconfdir=kmtvol+"Windows/System32/config"
 	
