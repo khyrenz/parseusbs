@@ -6,6 +6,7 @@
 
 # Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy
 # Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/
+# Uses LnkParse3 parser from Matus Jasnicky: https://github.com/Matmaus/LnkParse3
 
 # Extracts from the following Registry keys/values:
 ## SYSTEM\Select\Current -> to get kcurrentcontrolset
@@ -19,27 +20,32 @@
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop
 ## NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2
 
-#Parses the following Event Logs:
+# Parses the following Event Logs:
 ## Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx
 ## Event IDs 1001 in Microsoft-Windows-Storsvc%4Diagnostic.evtx (EID 1002 parsing removed as no extra info)
+
+# Parses all user account's LNK files, to extract drive letters for objects opened after the closest connection time to the object access/creation
 
 # Bypasses Windows permission errors on a mounted volume using chmod
 ## This only works if you're running the Terminal window as Administrator
 
 # CSV option produces two CSV output files - one showing USB info (usb-info.csv) and a timeline of connection and disconnection times (usb-timeline.csv)
 ## These output files are written to the same folder the script was run from
+## Events within 2 seconds of each other are merged 
 
 # Dependencies:
-## pip3 install regipy python-evtx
+## pip3 install regipy python-evtx LnkParse3
 
 # Limitations:
 ## Only parses Registry hives & Event Logs; does not parse any other artefacts
 ## Will only replay Registry transaction logs if they're in the same folder as the provided hive
+## Only parses event logs and LNK files if the Volume option is used
 ## Does not detect or clean dirty event logs
 
 # Importing libraries
-import sys, os, stat, ctypes, platform, base64
+import sys, os, stat, ctypes, platform, base64, time
 import Evtx.Evtx as evtx
+import LnkParse3
 from xml.dom import minidom
 from datetime import datetime,timedelta,timezone
 from regipy.registry import RegistryHive
@@ -106,6 +112,12 @@ class ExternalDevice:
 	def addAltSerial(self, kser):
 		self.altSerials.append(kser)
 
+#Function to display tool, header
+def printHeader():
+	print("parseUSBs version 1.6")
+	print("Registry parser, to extract USB connection artifacts from registry hives, event logs and LNK files")
+	print("Author: Kathryn Hedley, khedley@khyrenz.com")
+	print("Copyright 2024 Kathryn Hedley, Khyrenz Ltd")
 		
 # Function to display help info
 def printHelp():
@@ -392,6 +404,8 @@ def stripUaspMarker(ksn):
 	
 # Check if two (str) dates are within 'secdiff' seconds of each other (either way)
 def timesInRange(ktm1, ktm2, secdiff):
+	if ktm1 == "" or ktm2 == "" or secdiff < 1:
+		return False
 	ktm1Secs = datetime.fromisoformat(ktm1).timestamp()
 	ktm2Secs = datetime.fromisoformat(ktm2).timestamp()
 
@@ -399,6 +413,12 @@ def timesInRange(ktm1, ktm2, secdiff):
 		return True
 	else:
 		return False
+		
+# Get difference bwetween two dates, assuming ktm should be AFTER basetm
+def datetimeDiff(basetm, ktm):
+	ktmSecs = datetime.fromisoformat(ktm).timestamp()
+	kbasetmSecs = datetime.fromisoformat(basetm).timestamp()
+	return ktmSecs - kbasetmSecs
 
 # Remove all characters after the last '&' character in a string, including the '&' itself
 def removeAmpEnd(kystr1):
@@ -410,11 +430,9 @@ def removeAmpEnd(kystr1):
 	else:
 		return kystr1
 
-### MAIN function ###
-print("parseUSBs version 1.5.4")
-print("Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives")
-print("Author: Kathryn Hedley, khedley@khyrenz.com")
-print("Copyright 2024 Kathryn Hedley, Khyrenz Ltd")
+
+### ---MAIN function--- ###
+printHeader()
 
 # Check & parse passed-in arguments
 next=""
@@ -472,9 +490,8 @@ if kmtvol:
 	for i in items.split('\n'):
 		if len(i) == 1:
 			dl=i
-	if os.path.isdir(kmtvol+dl+"/Windows"):
-		kmtvol+=dl+"/"
-	
+	if dl!="" and os.path.isdir(kmtvol+dl+"/Windows"):
+		kmtvol+=dl+"/"	
 	sysconfdir=kmtvol+"Windows/System32/config"
 	
 	#Changing Windows permissions to allow access to each system hive
@@ -487,6 +504,7 @@ if kmtvol:
 	if os.path.exists(kmtvol+"Users"):
 		userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
 		for usrdir in userfolders:
+			print(usrdir)
 			#Changing Windows permissions to allow access to each NTUSER hive
 			pychmod(usrdir)
 			#Store paths to NTUSER hives
@@ -969,6 +987,54 @@ if kmtvol:
 							#Checking for other info gaps from the Registry
 							if d.name == "":
 								d.name = make + " " + model
+
+#Parsing LNK files to get other drive letters
+for usrdir in userfolders:
+	lnkdir=usrdir+"/AppData/Roaming/Microsoft/Windows/Recent/"
+	if os.path.isdir(lnkdir) and len(lnkdir) != 0:
+		for f in os.listdir(lnkdir):
+			if f.endswith(".lnk"):
+				fpath=lnkdir+f
+				try:
+					data=os.popen('lnkparse -j \"'+fpath+'\"').read()
+					
+					if "DRIVE_REMOVABLE" in data:
+						fmtime = datetime.fromtimestamp(int(os.path.getctime(fpath))).replace(tzinfo=timezone.utc).isoformat()
+						
+						for l in data.split('\n'):
+							if "drive_serial_number" in l:
+								vals = l.split(':')
+								if len(vals) > 1:
+									lsn = vals[1].replace("\"", "").replace(" ", "").replace(",", "")[2:]
+									#Adding leading zero if missing
+									if len(lsn) == 7 or len(lsn) == 15:
+										lsn = "0" + lsn
+							if "local_base_path" in l:
+								vals = l.split(':')
+								if len(vals) > 1:
+									ldl = vals[1].replace("\"", "").replace(" ", "").replace(",", "")
+						
+						#Matching this event info with other connection info for the same device (match on VSN)
+						for d in devices:
+							closestconntime = ""
+							closestconnsecs = datetime.fromisoformat(d.firstConnected).timestamp()
+							
+							for c in d.getConnections():
+								#Match on device volume serial number
+								if c.volumeSerial == lsn:
+									#Find connection event closest to last modified time of LNK file (when path was last updated) but after connection time (>0)
+									diffsecs = datetimeDiff(c.time, fmtime)
+									if diffsecs > 0 and diffsecs < closestconnsecs:
+										closestconntime = c.time
+										
+							#Adding info to connection if not already populated
+							for c in d.getConnections():
+								if c.time == closestconntime and c.volumeSerial == lsn:
+									if c.driveLetter == "" and ldl != "":
+									   c.driveLetter = ldl+":\\"   
+				except Exception:
+					#empty value
+					pass
 
 #Print output in CSV or key-value pair format
 print()
