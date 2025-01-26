@@ -65,7 +65,7 @@ Options:
 >
 >	-o    \<csv|keyval\>		: Output to either CSV or key-value pair format. Default is key-value pairs. Note: outputs two CSV files - usb-info.csv & usb-timeline.csv   
 >
-> 	-d    <output dir>			: Define output folder if \'-o csv\' is used. Default is in same folder as the script') 
+> 	-d    \<output dir\>			: Define output folder if \'-o csv\' is used. Default is in same folder as the script') 
 
 **Example Usage:**  
 >    python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT 
