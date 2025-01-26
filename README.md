@@ -1,5 +1,5 @@
 # parseusbs
-parseUSBs version 1.6 
+parseUSBs version 1.7
 Parses USB connection artifacts from a mounted Windows volume or offline Registry hives  
 
 
@@ -10,8 +10,8 @@ Copyright 2024 Kathryn Hedley, Khyrenz Ltd
 
 Runs in Python3 using the following libraries:
 > Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy  
-> Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/
-> Uses LnkParse3 parser from Matus Jasnicky: https://github.com/Matmaus/LnkParse3
+> Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/  
+> Uses LnkParse3 parser from Matus Jasnicky: https://github.com/Matmaus/LnkParse3  
 
 **Extracts from the following Registry keys/values:**  
 >  SYSTEM\Select\Current -> to get CurrentControlSet  
@@ -27,7 +27,7 @@ Runs in Python3 using the following libraries:
 
 **Parses the following Event Logs:**  
 >  Event ID 1006 in Microsoft-Windows-Partition%4Diagnostic.evtx  
->  Event IDs 1001 in Microsoft-Windows-Storsvc%4Diagnostic.evtx  
+>  Event ID 1001 in Microsoft-Windows-Storsvc%4Diagnostic.evtx  
 
 **Parses all user account's LNK files, to extract drive letters for objects opened after the closest connection time to the object access/creation** 
 
@@ -53,15 +53,19 @@ Runs in Python3 using the following libraries:
   parseUSBs.py \<options\>  
 	
 Options:  
-> 	-h 		          	- Print this help message  
->	-s    \<SYSTEM hive\>  		- Parse this SYSTEM hive    
->	-u    \<NTUSER.dat hive\> 	- Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made   
-> 	-v    \<drive letter\>		- Parse this mounted volume. Use either this "-v" option or the individual hive options. If this option is provided, "-s|-u|-w" options will be ignored. *IMPORTANT*: Please make sure you are running this script in a terminal window that is running as Administrator to auto-bypass Windows permission issues  
-> 	-w    \<SOFTWARE hive\>	 	- Parse this SOFTWARE hive. This argument is optional. If omitted, some drive letters and volumes names may be missing in the output  
->	-o    \<csv|keyval\>		Output to either CSV or key-value pair format. Default is key-value pairs. Note: outputs two CSV files - usb-info.csv & usb-timeline.csv in same folder as the script  
+> 	-h 		          			: Print this help message  
+>	-s    \<SYSTEM hive\>  		: Parse this SYSTEM hive    
+>	-u    \<NTUSER.dat hive\> 	: Parse this NTUSER.DAT hive. This argument is optional & multiple can be provided. If omitted, connections to user accounts won\'t be made   
+> 	-v    \<drive letter\>		: Parse this mounted volume. Use either this "-v" option or the individual hive options. If this option is provided, "-s|-u|-w" options will be ignored. *IMPORTANT*: Please make sure you are running this script in a terminal window that is running as Administrator to auto-bypass Windows permission issues  
+> 	-w    \<SOFTWARE hive\>	 	: Parse this SOFTWARE hive. This argument is optional. If omitted, some drive letters and volumes names may be missing in the output  
+>	-o    \<csv|keyval\>		: Output to either CSV or key-value pair format. Default is key-value pairs. Note: outputs two CSV files - usb-info.csv & usb-timeline.csv 
+> 	-d    <output dir>			: Define output folder if \'-o csv\' is used. Default is in same folder as the script') 
 
 **Example Usage:**  
->    python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT  
+>    python3 parseUSBs.py -s SYSTEM -w SOFTWARE -u NTUSER1.DAT -u NTUSER2.DAT 
+> 
 >    python parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv
+>
 >    (In Windows CMD as Administrator:) python parseUSBs.py -v F: 
+>
 >    (on WSL as Administrator:) python3 parseUSBs.py -v /mnt/f  
