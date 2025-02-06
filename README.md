@@ -2,17 +2,20 @@
 parseUSBs version 1.7
 Parses USB connection artifacts from a mounted Windows volume or offline Registry hives  
 
-
 Registry parser, to extract USB connection artefacts from SYSTEM, SOFTWARE, and NTUSER.dat hives as well as custom event logs and LNK files (only to get drive letters) if running against a mounted Windows volume or mounted KAPE triage image of a Windows system  
 
 Author: Kathryn Hedley, khedley@khyrenz.com  
 Copyright 2024 Kathryn Hedley, Khyrenz Ltd  
+
+### Dependencies
+> **pip3 install regipy python-evtx LnkParse3**
 
 Runs in Python3 using the following libraries:
 > Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy  
 > Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/  
 > Uses LnkParse3 parser from Matus Jasnicky: https://github.com/Matmaus/LnkParse3  
 
+### Functionality
 **Extracts from the following Registry keys/values:**  
 >  SYSTEM\Select\Current -> to get CurrentControlSet  
 >  SYSTEM\CurrentControlSet\Enum\USB  
@@ -38,18 +41,16 @@ Runs in Python3 using the following libraries:
 **CSV option will output two files: USB information (usb-info.csv) and a timeline of connections and disconnection events (usb-timeline.csv)**  
 > Events within 2 seconds of each other are merged  
 
-**Dependencies:**  
-> pip3 install regipy python-evtx LnkParse3
 
-
-**Limitations:**  
+### Limitations
+  - Requires python 3.10+
   - Only parses listed artefacts; does not parse any others (although I welcome feedback on other useful inclusions) 
   - Will only replay transaction logs for Registry hives if they're in the same folder as the provided hive 
   - Only parses event logs and LNK files if the Volume option is used
   - Does not detect or clean dirty event logs
 
 
-**Usage:**  
+### Usage 
   parseUSBs.py \<options\>  
 	
 Options:  
@@ -72,6 +73,8 @@ Options:
 > 
 >    python parseUSBs.py -s C:/Windows/System32/config/SYSTEM -w C:/Windows/System32/config/SOFTWARE -u C:/Users/user1/NTUSER.DAT -o csv
 >
->    (In Windows CMD as Administrator:) python parseUSBs.py -v F: 
+>    (In Windows CMD as Administrator:) python parseUSBs.py -v F:
+>
+>    (In Windows CMD as Administrator:) parseUSBs.exe -v F: 
 >
 >    (on WSL as Administrator:) python3 parseUSBs.py -v /mnt/f  
