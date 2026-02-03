@@ -43,7 +43,7 @@
 ## Does not detect or clean dirty event logs
 
 # Importing libraries
-import sys, os, stat, ctypes, platform, base64, time
+import sys, os, stat, ctypes, platform, base64, time, subprocess
 import Evtx.Evtx as evtx
 import LnkParse3
 from xml.dom import minidom
@@ -536,7 +536,10 @@ if __name__ == "__main__":
 
 		#Checking if volume is full mounted image or a KAPE triage image & getting drive letter it's mounted as...
 		dl=""
-		items = os.popen('ls -l '+kmtvol+' 2>/dev/null | awk \'{print $9}\'').read()
+		try:
+			items = "\n".join(os.listdir(kmtvol))
+		except FileNotFoundError:
+			items = ""
 		for i in items.split('\n'):
 			if len(i) == 1:
 				dl=i
@@ -1091,7 +1094,16 @@ if __name__ == "__main__":
 				if f.endswith(".lnk"):
 					fpath=currusrlnkhydir+f
 					try:
-						data=os.popen('lnkparse -j \"'+fpath+'\" 2>/dev/null').read()
+						try:
+							result = subprocess.run(
+								['lnkparse', '-j', fpath],
+								capture_output=True,
+								text=True,
+								check=False,
+							)
+							data = result.stdout
+						except FileNotFoundError:
+							data = ""
 						
 						if "DRIVE_REMOVABLE" in data:
 							fmtime = datetime.fromtimestamp(int(os.path.getctime(fpath))).replace(tzinfo=timezone.utc).isoformat()
