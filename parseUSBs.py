@@ -2,7 +2,7 @@
 
 # Registry parser, to extract USB connection artifacts from SYSTEM, SOFTWARE, and NTUSER.dat hives
 # Author: Kathryn Hedley, khedley@khyrenz.com
-# Copyright 2025 Kathryn Hedley, Khyrenz Ltd
+# Copyright 2026 Kathryn Hedley, Khyrenz Ltd
 
 # Uses regipy offline hive parser library from Martin G. Korman: https://github.com/mkorman90/regipy/tree/master/regipy
 # Uses python-evtx parser from Willi Ballenthin: https://pypi.org/project/python-evtx/
@@ -116,10 +116,10 @@ class ExternalDevice:
 
 #Function to display tool, header
 def printHeader() -> None:
-	print("parseUSBs version 1.8")
+	print("parseUSBs version 1.9")
 	print("Registry parser, to extract USB connection artifacts from registry hives, event logs and LNK files")
 	print("Author: Kathryn Hedley, khedley@khyrenz.com")
-	print("Copyright 2025 Kathryn Hedley, Khyrenz Ltd")
+	print("Copyright 2026 Kathryn Hedley, Khyrenz Ltd")
 		
 # Function to display help info
 def printHelp() -> None:
@@ -200,7 +200,10 @@ def outputCSV(dev: list[ExternalDevice], outfile: str) -> None:
 					if vsns == "":
 						vsns += khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
 					else:
-						vsns += " | " + khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
+						#Code to add all without deduplication - vsns += " | " + khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
+						#Deduplicating results:
+						if khyvs.volumeSerial not in vsns:
+							vsns += " | " + khyvs.volumeSerial + " (" + khyvs.partStyle + ";" + khyvs.filesystem + ")"
 			dsns=khyd.iSerialNumber
 			for khyds in khyd.altSerials:
 				if khyds != "":
@@ -555,7 +558,12 @@ if __name__ == "__main__":
 		userHives=[]
 		
 		if os.path.exists(kmtvol+"Users"):
-			userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
+			try:
+				userfolders = [f.path for f in os.scandir(kmtvol+"Users") if f.is_dir()]
+			except FileNotFoundError:
+				print(f"Error: Directory '{kmtvol}Users' not found")
+				userfolders = []
+
 			for usrdir in userfolders:
 				#Changing Windows permissions to allow access to each NTUSER hive
 				pychmod(usrdir)
@@ -785,40 +793,6 @@ if __name__ == "__main__":
 							kdev.setVolumeName(volName)
 	except RegistryKeyNotFoundException:
 		print(f"Key not found: {swdkhypath} - parsing skipped")
-		
-	# Iterating over SOFTWARE\Microsoft\Windows Search\VolumeInfoCache to try & match up drive letter with known volume name...
-	vickhypath = "SOFTWARE\\Microsoft\\Windows Search\\VolumeInfoCache"
-	try:
-		swdkhy = SOFTWARE.get_key(vickhypath)
-		for kvickey in swdkhy.iter_subkeys():
-			#Get Drive Letter & Volume name for device
-			kdletter = kvickey.name + '\\'
-			kvname = kvickey.get_value('VolumeLabel')
-			#Getting another potential connection time for device
-			klwtime = convertWin64time(kvickey.header.last_modified)
-			
-			#Attempt to link on volume name to assign drive letter & other connection time
-			for kdv in devices:
-				if kdv.volumeName == kvname:
-					if kdv.lastDriveLetter == "":
-						kdv.setLastDriveLetter(kdletter)
-					
-					#Only adding other connection time to list if not already present
-					exists=False
-					for c in d.getConnections():
-						if c.time == klwtime:
-							exists = True
-					if not exists:
-						dc = DeviceConnection()
-						dc.time = klwtime
-						dc.connectionType = "Connect"
-						dc.volumeLabel = kvname
-						if kdletter != "":
-							dc.driveLetter = kdletter
-						d.addConnection(dc)
-						break
-	except RegistryKeyNotFoundException:
-		print(f"Key not found: {vickhypath} - parsing skipped")
 
 	#if volume option is provided, find & parse event logs for connection & disconnection events
 	if kmtvol:
@@ -1085,8 +1059,68 @@ if __name__ == "__main__":
 										d.name = make + " " + model
 		else:
 			print(f"File not found: {storsvcEvtx} - parsing skipped")
+
+	# Iterating over SOFTWARE\Microsoft\Windows Search\VolumeInfoCache to try & match up drive letter with known volume name...
+	vickhypath = "SOFTWARE\\Microsoft\\Windows Search\\VolumeInfoCache"
+	try:
+		swdkhy = SOFTWARE.get_key(vickhypath)
+		for kvickey in swdkhy.iter_subkeys():
+			#Get Drive Letter & Volume name for device
+			kdletter = kvickey.name + '\\'
+			kvname = kvickey.get_value('VolumeLabel')
+			
+			#Skipping C drive - not a USB device
+			if kdletter == "C:\\":
+				continue
+			
+			#Checking for empty VolumeLabel
+			if kvname==0:
+				kvname=""
+			#Getting another potential connection time for device
+			klwtime = convertWin64time(kvickey.header.last_modified)
+			
+			#Attempt to link to identified device on volume name or time to assign drive letter & volume name
+			for kdv in devices:
+				if kdv.volumeName == kvname:
+					if kdv.lastDriveLetter == "":
+						kdv.setLastDriveLetter(kdletter)
+					
+					#Only adding other connection time to list if not already present
+					exists=False
+					for c in d.getConnections():
+						if (timesInRange(klwtime, c.time, 1)):
+							exists = True
+					if not exists:
+						dc = DeviceConnection()
+						dc.time = klwtime
+						dc.connectionType = "Connect"
+						dc.volumeLabel = kvname
+						if kdletter != "":
+							dc.driveLetter = kdletter
+						d.addConnection(dc)
+						break
+				for con in kdv.getConnections():
+					if (timesInRange(con.time, klwtime, 2)):
+						if kdv.lastDriveLetter == "":
+							kdv.setLastDriveLetter(kdletter)
+						if con.driveLetter == "":
+							con.driveLetter = kdletter
+						if kdv.volumeName == "":
+							kdv.volumeName = kvname
+						if con.volumeLabel == "":
+							con.volumeLabel = kvname
+
+	except RegistryKeyNotFoundException:
+		print(f"Key not found: {vickhypath} - parsing skipped")
 			
 	#Parsing LNK files to get other drive letters
+	#Checking userfolders variable has been defined before trying to use it
+	try:
+		userfolders
+	except NameError:
+		print(f"Error: User's directory not defined")
+		userfolders = []
+
 	for usrdir in userfolders:
 		currusrlnkhydir = usrdir+"/AppData/Roaming/Microsoft/Windows/Recent/"
 		if os.path.isdir(currusrlnkhydir) and len(currusrlnkhydir) != 0:
